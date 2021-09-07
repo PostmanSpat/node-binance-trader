@@ -8,6 +8,7 @@
 
 * **trader:** added estimation of taker fees for better PnL calculation.
 * **trader:** limited decimal places for numbers in the web UI.
+* **trader:** added upgrade path for saved data.
 * **trader:** added buffer for minimum trade cost.
 
 ## [1.1.0] (2021-08-09)
