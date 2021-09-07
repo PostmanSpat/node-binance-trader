@@ -92,8 +92,8 @@ export class Transaction {
     value?: BigNumber // Either the original cost when the trade was opened or the recalcuated value when closed (only for buy/sell)
     signalPrice?: BigNumber // The expected price if initiated by a signal (only for buy/sell)
     timeSinceSignal?: number // The total time in milliseconds from receiving the signal to executing on Binance
-    profitLoss?: BigNumber // Calculated profit or loss of the quote coin on a closing trade
     estimatedFee?: BigNumber // Estimated value of the fee calculated in the quote coin
+    profitLoss?: BigNumber // Calculated profit or loss of the quote coin on a closing trade
 
     constructor(timestamp: Date, tradeOpen: TradeOpen, source: SourceType, action: ActionType, symbolAsset: string, quantity: BigNumber, signal?: Signal) {
         this.timestamp = timestamp
@@ -138,8 +138,8 @@ export class BalanceHistory {
     date: Date // Date and time that this history slice started
     openBalance: BigNumber // Opening balance
     closeBalance: BigNumber // Last observed balance
-    profitLoss: BigNumber // Difference between open and close balance
     estimatedFees: BigNumber // Total estimated fees
+    profitLoss: BigNumber // Difference between open and close balance less fees
     minOpenTrades?: number // Lowest number of concurrent open trades
     maxOpenTrades?: number // Highest number of concurrent open trades
     totalOpenedTrades: number // Total number of trades opened

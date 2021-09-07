@@ -2187,7 +2187,7 @@ function updateBalanceHistory(tradingType: TradingType, quote: string, entryType
     if (change) balance = balance.plus(change)
     if (fee) h.estimatedFees = h.estimatedFees.plus(fee)
     h.closeBalance = balance
-    h.profitLoss = h.closeBalance.minus(h.openBalance)
+    h.profitLoss = h.closeBalance.minus(h.openBalance).plus(h.estimatedFees)
     if (h.minOpenTrades == undefined || minOpenTradeCount < h.minOpenTrades) h.minOpenTrades = minOpenTradeCount
     if (h.maxOpenTrades == undefined || maxOpenTradeCount > h.maxOpenTrades) h.maxOpenTrades = maxOpenTradeCount
     if (entryType == EntryType.ENTER) {
