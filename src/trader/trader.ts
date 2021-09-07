@@ -1584,42 +1584,58 @@ export async function trade(signal: Signal, source: SourceType) {
 function rebalanceTrade(tradeOpen: TradeOpen, cost: BigNumber, wallet: WalletData) {
     if (!tradeOpen.cost) {
         // Hopefully this won't happen
-        return `Could not rebalance ${tradeOpen.symbol} trade, cost is undefined.`
+        return `Could not rebalance ${getLogName(tradeOpen)} trade, cost is undefined.`
     }
 
     if (tradeOpen.borrow && tradeOpen.borrow.isGreaterThan(0)) {
         // Hopefully this won't happen as we shouldn't be rebalancing SHORT trades, and rebalancing model does not borrow for LONG trades
-        return `Could not rebalance ${tradeOpen.symbol} trade, involves borrowed funds.`
+        return `Could not rebalance ${getLogName(tradeOpen)} trade, involves borrowed funds.`
     }
 
     if (!tradeOpen.priceBuy) {
         // Hopefully this won't happen as all LONG trades should have a purchase price
-        return `Could not rebalance ${tradeOpen.symbol} trade, no buy price.`
+        return `Could not rebalance ${getLogName(tradeOpen)} trade, no buy price.`
     }
 
     if (tradeOpen.cost.isLessThanOrEqualTo(cost)) {
         // Maybe the largest trade is already smaller than the free balance, so we're just going to skip
-        logger.warning(`Could not rebalance ${tradeOpen.symbol} trade, it is already below the target cost.`)
+        logger.warn(`Could not rebalance ${getLogName(tradeOpen)} trade, it is already below the target cost.`)
         // Technically this is successful even though it didn't free up any funds
         return
     }
 
     // Have to set a sell price so that it can update balances
+    // The sell price may have updated from a previous successful rebalance, so we'll use the latest for calculating
     // TODO: It would be nice to use current market price instead of cost calculated from opening price
     if (!tradeOpen.priceSell) tradeOpen.priceSell = tradeOpen.priceBuy
 
     // Calculate the difference in cost and quantity
-    let diffCost = tradeOpen.cost.minus(cost)
-    const diffQTY = getLegalQty(diffCost.dividedBy(tradeOpen.priceBuy), tradingMetaData.markets[tradeOpen.symbol], tradeOpen.priceBuy)
+    const market = tradingMetaData.markets[tradeOpen.symbol]
+    const targetDiffCost = tradeOpen.cost.minus(cost)
+    const diffQTY = getLegalQty(targetDiffCost.dividedBy(tradeOpen.priceSell), market, tradeOpen.priceSell)
     // Recalculate the cost as the quantity may have rounded up
-    diffCost = diffQTY.multipliedBy(tradeOpen.priceBuy)
+    const diffCost = diffQTY.multipliedBy(tradeOpen.priceSell)
+
+    // Make sure any rounding is not taking way more that expected (i.e. more than double)
+    if (diffCost.dividedBy(targetDiffCost).isGreaterThan(2)) {
+        logger.warn(`Will not rebalance ${getLogName(tradeOpen)} trade, as the legal trade cost of ${diffCost} ${market.quote} is much higher than the needed ${targetDiffCost} ${market.quote}.`)
+        // Don't want to show this as an error
+        return
+    }
 
     // Make sure the rebalance would not close the trade
     if (diffQTY.isGreaterThanOrEqualTo(tradeOpen.quantity)) {
         return `Could not rebalance ${getLogName(tradeOpen)} trade, it would be more than the remaining quantity.`
     }
 
-    logger.debug(`Rebalancing ${getLogName(tradeOpen)} trade to reduce by ${diffQTY} quantity and ${diffCost} cost.`)
+    // Make sure any rounding doesn't leave us with a trade that is too small
+    const remQty = tradeOpen.quantity.minus(diffQTY)
+    const legRemQty = getLegalQty(remQty, market, tradeOpen.priceSell)
+    if (legRemQty.isGreaterThan(remQty)) {
+        return `Could not rebalance ${getLogName(tradeOpen)} trade, as the remaining quantity of ${remQty} ${market.base} may be too small to close later.`
+    }
+
+    logger.debug(`Rebalancing ${getLogName(tradeOpen)} trade to reduce by ${diffQTY} ${market.base} and ${diffCost} ${market.quote}.`)
 
     // It is possible that multiple signals for the same coin can come in at the same time
     // So a second trade may try to rebalance the first before the first trade has executed
@@ -1637,11 +1653,11 @@ function rebalanceTrade(tradeOpen: TradeOpen, cost: BigNumber, wallet: WalletDat
         tradeOpen.timeSell = new Date()
     } else {
         // In this case we don't need to sell anything, just adjust the original trade and it should only buy what is allocated
-        logger.warn(`${getLogName(tradeOpen)} trade needs to be rebalanced before it was executed, original cost of ${tradeOpen.cost} will be reduced by ${diffCost}.`)
+        logger.warn(`${getLogName(tradeOpen)} trade needs to be rebalanced before it was executed, original cost of ${tradeOpen.cost} ${market.quote} will be reduced by ${diffCost}.`)
     }
 
     // If we got this far then we just have to assume that the rebalance trade will go through ok, so update the original trade
-    tradeOpen.quantity = tradeOpen.quantity.minus(diffQTY)
+    tradeOpen.quantity = remQty
     tradeOpen.cost = tradeOpen.cost!.minus(diffCost)
     tradeOpen.timeUpdated = new Date()
     saveState("tradesOpen")
@@ -1889,8 +1905,8 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
                                 logger.info(`Attempting to rebalance ${use.trades.length} existing trade(s) on ${use.type} to ${use.potential?.toFixed()} ${tradingData.market.quote}.`)
 
                                 // Check for the minimum cost here as we don't want to start rebalancing if we can't make the trade
-                                if (tradingData.market.limits.cost?.min && cost.isLessThan(tradingData.market.limits.cost.min)) {
-                                    const logMessage = `Failed to trade as rebalancing to free up ${cost.toFixed()} ${tradingData.market.quote} would be less than the minimum trade cost of ${tradingData.market.limits.cost.min} ${tradingData.market.quote}.`
+                                if (cost.isLessThan(getMinCost(tradingData.market))) {
+                                    const logMessage = `Failed to trade as rebalancing to free up ${cost.toFixed()} ${tradingData.market.quote} would be less than the minimum trade cost of ${getMinCost(tradingData.market)} ${tradingData.market.quote}.`
                                     logger.error(logMessage)
                                     throw logMessage
                                 }
@@ -1921,8 +1937,8 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
                     logger.debug(`${getLogName(tradingData.signal)} trade can use ${cost} ${tradingData.market.quote}.`)
 
                     // As cost probably changed, check for the minimum cost to see if we can make the trade
-                    if (tradingData.market.limits.cost?.min && cost.isLessThan(tradingData.market.limits.cost.min)) {
-                        const logMessage = `Failed to trade as available ${use.type} funds of ${cost.toFixed()} ${tradingData.market.quote} would be less than the minimum trade cost of ${tradingData.market.limits.cost.min} ${tradingData.market.quote}.`
+                    if (cost.isLessThan(getMinCost(tradingData.market))) {
+                        const logMessage = `Failed to trade as available ${use.type} funds of ${cost.toFixed()} ${tradingData.market.quote} would be less than the minimum trade cost of ${getMinCost(tradingData.market)} ${tradingData.market.quote}.`
                         logger.error(logMessage)
                         throw logMessage
                     }
@@ -2298,6 +2314,15 @@ function getOpenTradeCount(positionType: PositionType, tradingType: TradingType)
     ).length
 }
 
+// Returns the minimum trade cost with buffer applied for slippage
+function getMinCost(market: Market): BigNumber {
+    if (market.limits.cost) {
+        // Increase the minimum cost by the buffer fraction
+        return new BigNumber(market.limits.cost.min).multipliedBy(1 + env().MIN_COST_BUFFER)
+    }
+    return new BigNumber(0)
+}
+
 // Ensures that the order quantity is within the allowed limits and precision
 // https://ccxt.readthedocs.io/en/latest/manual.html#precision-and-limits
 function getLegalQty(qty: BigNumber, market: Market, price: BigNumber): BigNumber {
@@ -2323,8 +2348,9 @@ function getLegalQty(qty: BigNumber, market: Market, price: BigNumber): BigNumbe
 
     if (market.limits.cost) {
         let cost = qty.multipliedBy(price)
-        if (cost.isLessThan(market.limits.cost.min)) {
-            qty = new BigNumber(market.limits.cost.min).dividedBy(price)
+        const minCost = getMinCost(market)
+        if (cost.isLessThan(minCost)) {
+            qty = minCost.dividedBy(price)
             logger.debug(`${market.symbol} trade cost is below the minimum.`)
         }
 
@@ -2337,7 +2363,7 @@ function getLegalQty(qty: BigNumber, market: Market, price: BigNumber): BigNumbe
         // Precision can cause the quantity to truncate and drop below the minimum again, so calculate and test
         qty = amountToPrecision(market.symbol, qty)
         cost = qty.multipliedBy(price)
-        if (cost.isLessThan(market.limits.cost.min)) {
+        if (cost.isLessThan(minCost)) {
             logger.debug(`${market.symbol} adjusted trade cost is below the minimum.`)
             // Add on the minimum amount (this should be a valid precision/step size)
             qty = qty.plus(market.limits.amount.min)
@@ -2428,6 +2454,7 @@ async function run() {
     if (!Number.isInteger(env().STRATEGY_LOSS_LIMIT)) issues.push("STRATEGY_LOSS_LIMIT must be a whole number.")
     if (env().VIRTUAL_WALLET_FUNDS <= 0) issues.push("VIRTUAL_WALLET_FUNDS must be greater than 0.")
     if (env().TAKER_FEE_PERCENT < 0) issues.push("TAKER_FEE_PERCENT must be 0 or more.")
+    if (env().MIN_COST_BUFFER < 0) issues.push("MIN_COST_BUFFER must be 0 or more.")
     if (!env().IS_TRADE_MARGIN_ENABLED && env().PRIMARY_WALLET == WalletType.MARGIN) issues.push(`PRIMARY_WALLET cannot be ${WalletType.MARGIN} if IS_TRADE_MARGIN_ENABLED is false.`)
     if (!env().IS_TRADE_MARGIN_ENABLED && (env().TRADE_LONG_FUNDS == LongFundsType.BORROW_ALL || env().TRADE_LONG_FUNDS == LongFundsType.BORROW_MIN)) issues.push(`TRADE_LONG_FUNDS cannot be ${env().TRADE_LONG_FUNDS} if IS_TRADE_MARGIN_ENABLED is false.`)
     if (env().IS_NOTIFIER_GMAIL_ENABLED && (!env().NOTIFIER_GMAIL_ADDRESS || !env().NOTIFIER_GMAIL_APP_PASSWORD)) issues.push("NOTIFIER_GMAIL_ADDRESS and NOTIFIER_GMAIL_APP_PASSWORD are required for IS_NOTIFIER_GMAIL_ENABLED.")

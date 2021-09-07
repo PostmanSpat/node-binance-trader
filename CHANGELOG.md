@@ -1,9 +1,14 @@
 ## [1.2.0] (2021-08-09)
 
+### Bug Fixes
+
+* **trader:** rebalancing will not occur if rounding is more than 50%, or remaining quantity is too small.
+
 ### Features
 
 * **trader:** added estimation of taker fees for better PnL calculation.
 * **trader:** limited decimal places for numbers in the web UI.
+* **trader:** added buffer for minimum trade cost.
 
 ## [1.1.0] (2021-08-09)
 

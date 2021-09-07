@@ -56,6 +56,9 @@ The new features that I have added to the trader include:
 * ***CONFIG:* Estimated Taker Fee**
   * In a typical setup, fees are charged in BNB, therefore they do not affect the balance of the coin used for funding the strategy. So in order to make the calculated PnL more accurate, the estimated fees are calculated based on the spot wallet Taker Fee percentage. It does not currently calculate the interest charged on margin lending.
   * The default is 0.075%. If you have a higher VIP level or rebate on Binance that entitles you to lower fees, you can modify the Taker Fee percentage within the trader to match.
+* ***CONFIG:* Minimum Trade Cost Buffer**
+  * Sometimes it is possible to get a MIN_NOTIONAL error from Binance if the trade cost is too small. Even though the trader attempts to round up to the minimum cost, slippage in the price can still cause it to fail. So a buffer is used to increase the minimum cost to attempt to avoid this error.
+  * The default is 0.2, which is 2% of the minimum cost as defined by Binance.
 * ***CONFIG:* Virtual Wallet Funds**
   * You can set a default balance for virtual trades, this allows you to simulate some of the auto-balancing or funding models above. The value represents roughly the equivalent BTC amount. For example, if you set the funds to 1 but you are trading in USDT, it will use the minimum purchase volumes to estimate a 'similar' USDT value of 1 BTC as the starting balance. This is not current market price, it is just a pre-determined scale set by Binance.
   * The default is 0.1 BTC which (at the time of writing) converts to 10,000 USDT.
