@@ -2494,7 +2494,7 @@ async function startUp() {
         }
 
         // Check to see if data structures have changed
-        upgradeMetaData()
+        await upgradeMetaData()
     }
     
     // Make sure the markets data is loaded at least once
@@ -2507,8 +2507,10 @@ async function startUp() {
     // Note, we can't get previously open trades here because we need to know whether they are real or virtual, so we have to wait for the payload
     // Strategies also come down in the payload, so no signals will be accepted until that is processed
 
+    // Web diagnostics UI and keep alive touch point for uptime bot
     startWebserver()
 
+    // Once it connects to the NBT Hub it should trigger the onUserPayload() method to continue setting up the trader
     socket.connect()
 
     // Other things will happen after this asynchronously before the trader is operational
