@@ -2465,6 +2465,9 @@ async function startUp() {
                 }
             }
         }
+
+        // Check to see if data structures have changed
+        upgradeMetaData()
     }
     
     // Make sure the markets data is loaded at least once
@@ -2483,6 +2486,57 @@ async function startUp() {
 
     // Other things will happen after this asynchronously before the trader is operational
     logger.debug("NBT Trader start up sequence is complete.")
+}
+
+// Checks the previous version number and applies changes to the tradingMetaData to match current structures
+async function upgradeMetaData() {
+    let upgrade = false
+
+    // Load the previous version from the database
+    let versionStr = await loadObject("Version") as string
+    if (!versionStr) versionStr = "1.0.0" // Default version if none previously saved
+    // Split the version into parts so that it is easier to check as numbers
+    const oldVersion = versionStr.split('.').map(p => Number(p))
+    const newVersion = (env().VERSION as string).split('.').map(p => Number(p))
+
+    // Check versions have the same number of parts
+    if (oldVersion.length != newVersion.length) {
+        // I don't think this will happen
+        logger.error(`Unexpected version number: ${versionStr}.`)
+        return
+    }
+
+    // Check to see if the loaded version number was earlier than the current version
+    for (let i=0; i<oldVersion.length; ++i) {
+        if (oldVersion[i] < newVersion[i]) {
+            upgrade = true
+            break
+        } else if (oldVersion[i] != newVersion[i]) {
+            // I don't think this will happen
+            logger.error(`Unexpected version number: ${versionStr}.`)
+            return
+        }
+    }
+
+    if (upgrade) {
+        logger.info(`Upgrading meta data from v${versionStr} to v${env().VERSION}...`)
+
+        // Upgrades for version 1.2.0
+        if (oldVersion[0] == 1 && oldVersion[1] < 2) {
+            // Add estimated fees to balance history
+            for (let tradingType of Object.keys(tradingMetaData.balanceHistory)) {
+                for (let coin of Object.keys(tradingMetaData.balanceHistory[tradingType])) {
+                    tradingMetaData.balanceHistory[tradingType][coin].forEach(h => h.estimatedFees = new BigNumber(0))
+                }
+            }
+            saveState("balanceHistory")
+        }
+
+        // TODO: add newer upgrades here so that they can be applied in the correct sequence
+
+        // Save the current version number once all upgrades are complete
+        await saveObjects({"Version": env().VERSION})
+    }
 }
 
 // If something is really broken this will stop the trader
