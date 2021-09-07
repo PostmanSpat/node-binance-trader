@@ -50,6 +50,7 @@ export function getDefault(): Readonly<any> {
         IS_TRADE_MARGIN_ENABLED: bool({ default: true, desc: "Used to disable use of margin wallet trading for both LONG and SHORT trades" }),
         IS_PAY_INTEREST_ENABLED: bool({ default: true, desc: "Automatically repays all BNB interest before repaying margin loans" }),
         BNB_FREE_THRESHOLD: num({ default: 0.04, desc: "Creates a warning if your available BNB balance is below the threshold (too low for fees and interest)"}),
+        TAKER_FEE_PERCENT: num({ default: 0.075, desc: "The spot trading Taker Fee as quoted on Binance"}),
         VIRTUAL_WALLET_FUNDS: num({ default: 0.1, desc: "The (roughly) equivalent BTC value used as the default starting balance for all virtual wallets" }),
         WEB_PASSWORD: str({ default: "", desc: "Password to restrict access to the internal diagnostics webserver" }),
 
@@ -60,6 +61,7 @@ export function getDefault(): Readonly<any> {
         MAX_LOG_LENGTH: num({ default: 1000, desc: "Maximum number of entries for in-memory logging and transactions" }),
         MAX_DATABASE_ROWS: num({ default: 10000, desc: "Maximum number of records that can be written to the database" }),
         MAX_WEB_COLOURS: num({ default: 10, desc: "Maximum number unique colours used to differentiate string data in the web UI" }),
+        MAX_WEB_PRECISION: num({ default: 8, desc: "Maximum number decimal places to display for Big Numbers in the web UI" }),
         REFERENCE_SYMBOL: str({ default: "BNBBTC", desc: "Uses this market data to calculate wallet funds for other coins" }),
         BALANCE_SYNC_DELAY: num({ default: 1500, desc: "Number of milliseconds to wait after making a trade before fetching current balances" }),
     })
