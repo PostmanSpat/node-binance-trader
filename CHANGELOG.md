@@ -10,6 +10,7 @@
 * **trader:** limited decimal places for numbers in the web UI.
 * **trader:** added upgrade path for saved data.
 * **trader:** added buffer for minimum trade cost.
+* **trader:** compare open trades to the source strategy.
 
 ## [1.1.0] (2021-08-09)
 

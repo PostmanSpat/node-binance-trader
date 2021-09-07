@@ -14,7 +14,7 @@ import {
     marginBorrow,
     marginRepay
 } from "./apis/binance"
-import { getTradeOpenList } from "./apis/bva"
+import { getStratTradeOpenList, getTradeOpenList } from "./apis/bva"
 import { initialiseDatabase, loadObject, saveObjects, saveRecord } from "./apis/postgres"
 import env from "./env"
 import startWebserver from "./http"
@@ -33,6 +33,7 @@ import {
 } from "./types/bva"
 import { MessageType } from "./types/notifier"
 import { WalletType, TradingData, TradingMetaData, TradingSequence, LongFundsType, WalletData, ActionType, SourceType, Transaction, BalanceHistory } from "./types/trader"
+import { resolve } from "path/posix"
 
 // Standard error messages
 const logDefaultEntryType = "It shouldn't be possible to have an entry type other than enter or exit."
@@ -103,8 +104,7 @@ export async function onUserPayload(strategies: StrategyJson[]) {
             })
         )
 
-        // If there were no strategies previously then this is probably the first time we've got them
-        // Technically you may have had no strategies configured before, but then you should have no trades either
+        // If the trader is not yet operational then load the previous open trades from the NBT Hub
         if (!isOperational) {
             tradingMetaData.tradesOpen = await loadPreviousOpenTrades(newStrategies).catch((reason) => {
                 // This will prevent the strategies from being saved too, so this will prevent the trader from functioning until the problem is resolved
@@ -118,12 +118,15 @@ export async function onUserPayload(strategies: StrategyJson[]) {
             logger.info("NBT Trader is operational.")
         }
 
-        // Compare differences with any previous strategies
+        // Compare differences with any previous strategies and copy trade flags
         checkStrategyChanges(newStrategies)
         
         // Everything is good to go, so update to the new strategies
         tradingMetaData.strategies = newStrategies
         saveState("strategies")
+
+        // Compare the open trades for each strategy to see if they have been closed on the NBT Hub
+        compareStrategyTrades()
     } catch (reason) {
         shutDown(reason)
         return Promise.reject(reason)
@@ -509,6 +512,39 @@ function checkStrategyChanges(strategies: Dictionary<Strategy>) {
         // Note, I think if you turn trade off in the NBT Hub you don't get the strategy in the payload, so you'll lose the name anyway
         strategies[strategy].name = tradingMetaData.strategies[strategy].name
     }
+}
+
+// Checks to see if all your open trades are also still open on the NBT Hub
+async function compareStrategyTrades() {
+    logger.info("Comparing open trades to source strategies...")
+    // Only check the strategies that are still running normally
+    for (let strategy of Object.values(tradingMetaData.strategies).filter(strategy => strategy.isActive && !strategy.isStopped)) {
+        // Find all trades for this strategy that are open
+        const userTrades = tradingMetaData.tradesOpen.filter(trade => trade.strategyId == strategy.id && !trade.isStopped)
+        // Only compare if at least on trade is open
+        if (userTrades.length) {
+            // Retrieve the strategy's open trades from the NBT Hub
+            const stratTrades = await getStratTradeOpenList(strategy.id).catch((reason) => {
+                logger.silly("compareStrategyTrades->getStratTradeOpenList: " + reason)
+                // As nothing is waiting for this, we'll just exit if there is a failure
+                return Promise.resolve(undefined)
+            })
+            if (stratTrades == undefined) return Promise.resolve()
+
+            // Check that each open user trade is still open in the strategy
+            for (const tradeOpen of userTrades) {
+                if (!getTradeOpenFiltered(tradeOpen, stratTrades).length) {
+                    const logMessage = `${getLogName(tradeOpen)} trade is no longer open in the source strategy, you may have missed the close signal.`
+                    logger.warn(logMessage)
+                    // Send notification that the trade is no longer valid
+                    notifyAll(getNotifierMessage(MessageType.WARN, undefined, tradeOpen, logMessage as string)).catch((reason) => {
+                        logger.silly("checkOpenTrades->notifyAll: " + reason)
+                    })
+                }
+            }
+        }
+    }
+
 }
 
 // Process automatic buy signal from NBT Hub
