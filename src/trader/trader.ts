@@ -1401,7 +1401,7 @@ export async function executeTradingTask(
         const strategy = tradingMetaData.strategies[tradeOpen.strategyId]
         // Manually closing a trade or rebalancing should not affect the count of losses
         if (strategy && source == SourceType.SIGNAL && signal) {
-            // Check for losing trade
+            // Check for losing trade, note this doesn't consider estimated fees
             if (change.isLessThan(0)) {
                 // Losing trade, increase the count
                 strategy.lossTradeRun++

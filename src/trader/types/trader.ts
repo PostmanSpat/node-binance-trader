@@ -114,6 +114,7 @@ export class Transaction {
         }
         if (this.price) {
             this.value = this.quantity.multipliedBy(this.price)
+            // If buy or sell, calculate a single fee for this transaction
             this.estimatedFee = this.value.multipliedBy(env().TAKER_FEE_PERCENT / 100).negated()
         }
         if (signal) {
@@ -123,6 +124,11 @@ export class Transaction {
         if ((action == ActionType.BUY || action == ActionType.SELL) && tradeOpen.priceBuy && tradeOpen.priceSell) {
             // Regardless of whether this was SHORT or LONG, you should always buy low and sell high
             this.profitLoss = tradeOpen.quantity.multipliedBy(tradeOpen.priceSell).minus(tradeOpen.quantity.multipliedBy(tradeOpen.priceBuy))
+
+            // The above estimated fee only represents this transaction, but the PnL represents both buy and sell, so need to deduct both fees
+            const buyFee = this.quantity.multipliedBy(tradeOpen.priceBuy).multipliedBy(env().TAKER_FEE_PERCENT / 100)
+            const sellFee = this.quantity.multipliedBy(tradeOpen.priceSell).multipliedBy(env().TAKER_FEE_PERCENT / 100)
+            this.profitLoss = this.profitLoss.minus(buyFee).minus(sellFee)
         }
     }
 }
