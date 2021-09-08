@@ -1,7 +1,7 @@
 import TeleBot from "telebot"
 
 import env from "../env"
-import { Notifier, NotifierMessage } from "../types/notifier"
+import { MessageType, Notifier, NotifierMessage } from "../types/notifier"
 import { getTradeOpenList } from "../apis/bva"
 import logger from "../../logger"
 
@@ -15,6 +15,7 @@ export default function (): Notifier {
             return Promise.reject(reason)
         })
         return notify({
+            messageType: MessageType.INFO, // Even though this is info, it won't be filtered out by NOTIFIER_LEVEL
             content:
                 `Open Trades: ${tradeOpenList.length} - ${tradeOpenList
                     .map((tradeOpen) => tradeOpen.symbol)
@@ -23,6 +24,7 @@ export default function (): Notifier {
     })
     telBot.on("start", async () => {
         await notify({
+            messageType: MessageType.INFO, // Even though this is info, it won't be filtered out by NOTIFIER_LEVEL
             content: "Trader Bot started!",
         }).catch((reason) => {
             logger.error(reason)

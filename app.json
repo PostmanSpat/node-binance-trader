@@ -47,6 +47,11 @@
         "required": false
       },
 
+      "NOTIFIER_LEVEL": {
+        "description": "Minimum level of notifications that will be sent (info, success, warn, error)",
+        "required": false
+      },
+
       "IS_BUY_QTY_FRACTION": {
         "description": "Uses the 'Quantity to Buy' from the NBT Hub as a fraction of your wallet balance (e.g. 0.1 is 10%)",
         "required": false
@@ -93,6 +98,14 @@
       },
       "BNB_FREE_THRESHOLD": {
         "description": "Creates a warning if your available BNB balance is below the threshold (too low for fees and interest)",
+        "required": false
+      },
+      "TAKER_FEE_PERCENT": {
+        "description": "The spot trading Taker Fee as quoted on Binance",
+        "required": false
+      },
+      "MIN_COST_BUFFER": {
+        "description": "Decimal fraction to increase the minimum trade cost to avoid MIN_NOTIONAL errors",
         "required": false
       },
       "VIRTUAL_WALLET_FUNDS": {

@@ -3,6 +3,7 @@ export interface Notifier {
 }
 
 export interface NotifierMessage {
+    messageType: MessageType
     subject?: string
     content: string
     contentHtml?: string
