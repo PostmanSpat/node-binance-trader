@@ -2437,6 +2437,8 @@ async function refreshMarkets() {
 const BNBState: Dictionary<string> = {}
 async function checkBNBThreshold(wallet: WalletType) {
     if (env().BNB_FREE_THRESHOLD >= 0) {
+        logger.debug(`${wallet} is not in ${Object.keys(BNBState)} = ${!(wallet in Object.keys(BNBState))}.`)
+
         // Initialise dictionary, assuming it is ok to start with
         if (!(wallet in Object.keys(BNBState))) BNBState[wallet] = "ok"
 
@@ -2470,6 +2472,8 @@ async function checkBNBThreshold(wallet: WalletType) {
             // Reset once the balance has exceeded the threshold again
             BNBState[wallet] = "ok"
         }
+
+        logger.debug(`BNB for ${wallet} is ${BNBState[wallet]}.`)
     }
 }
 
