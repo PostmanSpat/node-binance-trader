@@ -36,6 +36,8 @@ export function getDefault(): Readonly<any> {
         IS_NOTIFIER_TELEGRAM_ENABLED: bool({ default: false, desc: "Selects if Telegram will be used" }),
         NOTIFIER_TELEGRAM_API_KEY: str({ default: "", desc: "Telegram Key for your bot (To create one follow https://core.telegram.org/bots#6-botfather)" }),
         NOTIFIER_TELEGRAM_RECEIVER_ID: str({ default: "", desc: "Unique identifier for the target chat (as a number) or username of the target channel (in the format @channelusername)" }),
+        
+        NOTIFIER_LEVEL: str({ default: "info", choices: [ "info", "success", "warn", "error" ], desc: "Minimum level of notifications that will be sent"}),
 
         // Additional configuration options for trader features
         IS_BUY_QTY_FRACTION: bool({ default: false, desc: "Uses the 'Quantity to Buy' from the NBT Hub as a fraction of your wallet balance (e.g. 0.1 is 10%)" }),
@@ -58,7 +60,7 @@ export function getDefault(): Readonly<any> {
         // Internal configuration options that can be changed but shouldn't need to be
         TRADER_PORT: port({ default: 8003, desc: "The port to trader webserver runs" }),
         VERSION: str({ default: packageJson.version }),
-        LOG_LEVEL: str({ default: "info", choices: ["silly", "debug", "info", "warn", "error" ]}),
+        LOG_LEVEL: str({ default: "info", choices: [ "silly", "debug", "info", "warn", "error" ]}),
         MAX_LOG_LENGTH: num({ default: 1000, desc: "Maximum number of entries for in-memory logging and transactions" }),
         MAX_DATABASE_ROWS: num({ default: 10000, desc: "Maximum number of records that can be written to the database" }),
         MAX_WEB_COLOURS: num({ default: 10, desc: "Maximum number unique colours used to differentiate string data in the web UI" }),

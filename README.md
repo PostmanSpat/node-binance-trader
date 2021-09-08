@@ -102,6 +102,9 @@ The new features that I have added to the trader include:
   * If a trade fails to execute it will now send a notification with the error message.
   * If there are any issues loading previous trades after the trader restarts it will now send a notification message.
   * Trade notifications now include the quantity, cost, borrowed amount, wallet, trading type (live or virtual), and actual buy and sell prices from the transaction.
+* **CONFIG: Notification Level Filter**
+  * If you are happy to monitor the status of your trades in the Web Diagnostics but want to receive notifications when something goes wrong, you can now change the Notifier Level in the settings to limit the types of messages that are sent by the notification system.
+  * The default is 'info' which allows all, but can be changed to 'success', 'warn', or 'error'. 
 * ***CONFIG:* Additional Logging**
   * By default the trader will only log 'info', 'warn', and 'error' messages. But there is an internal setting to change the logging level to 'debug' if you want more insight into what decisions the trader is making. You can even drop the level to 'silly' to see all incoming JSON messages and SQL statements.
   * If you have the database backup enabled then it will keep the logs in the database, but only the original 'info', 'warn', and 'error' messages will be saved to minimise space. If you enable the other levels they will only be held in memory while the trader is running, and can be viewed via the web diagnostics interface.

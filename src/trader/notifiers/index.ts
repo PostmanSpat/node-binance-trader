@@ -20,6 +20,13 @@ export default function initializeNotifiers(): Notifier {
 
 // Sends notifications on all the different channels
 export function notifyAll(notifierMessage: NotifierMessage): Promise<void> {
+    const valLevels = Object.values(MessageType)
+    const keyLevels = Object.keys(MessageType)
+    if (valLevels.indexOf(notifierMessage.messageType) > keyLevels.indexOf((env().NOTIFIER_LEVEL as string).toUpperCase())) {
+        // The level of this message is too low to send, so just return
+        return Promise.resolve()
+    }
+
     return new Promise((resolve, reject) => {
         Promise.all(
             notifiers.map((notifier) => notifier.notify(notifierMessage))
@@ -81,6 +88,7 @@ export function getNotifierMessage(
     }
 
     return {
+        messageType: messageType,
         subject: base,
         content: base + content.join("\n"),
         contentHtml: baseHtml + content.join("<br/>"),

@@ -2460,7 +2460,7 @@ async function checkBNBThreshold(wallet: WalletType) {
                 }
 
                 // Send as a notification
-                notifyAll({subject: notifyLevel, content: logMessage}).catch((reason) => {
+                notifyAll({messageType: notifyLevel, subject: notifyLevel, content: logMessage}).catch((reason) => {
                     logger.silly("checkBNBThreshold->notifyAll: " + reason)
                 })
             }
@@ -2611,7 +2611,7 @@ export function shutDown(reason: any) {
     isOperational = false
 
     // First try to send a notification that the trader is shutting down
-    notifyAll({subject: MessageType.ERROR, content: `NBT Trader is not operational, shutting down...\n${reason}`}).catch((reason) => {
+    notifyAll({messageType: MessageType.ERROR, subject: MessageType.ERROR, content: `NBT Trader is not operational, shutting down...\n${reason}`}).catch((reason) => {
         logger.silly("shutDown->notifyAll: " + reason)
     }).finally(() => {
         // Just in case something still needs to be written to the database, try to flush it first
