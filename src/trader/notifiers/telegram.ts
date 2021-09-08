@@ -43,9 +43,9 @@ async function notify(notifierMessage: NotifierMessage, fromId?: string): Promis
 
     return telBot.sendMessage(
         fromId || env().NOTIFIER_TELEGRAM_RECEIVER_ID,
-        notifierMessage.content,
-        /*{
+        `<code>${notifierMessage.content}</code>`,
+        {
             parseMode: "html",
-        }*/
+        }
     )
 }

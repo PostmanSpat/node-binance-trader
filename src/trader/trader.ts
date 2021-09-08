@@ -446,7 +446,7 @@ async function loadPreviousOpenTrades(strategies: Dictionary<Strategy>): Promise
 
     // Send notifications of discarded trades
     badTrades.forEach(trade => 
-        notifyAll(getNotifierMessage(MessageType.WARN, undefined, trade, "This previous trade could not be reloaded. Check the log for details.")).catch((reason) => {
+        notifyAll(getNotifierMessage(MessageType.WARN, undefined, undefined, trade, "This previous trade could not be reloaded. Check the log for details.")).catch((reason) => {
             logger.silly("loadPreviousOpenTrades->notifyAll: " + reason)
         })
     )
@@ -478,7 +478,7 @@ function checkStrategyChanges(strategies: Dictionary<Strategy>) {
             logger.warn(`Strategy ${strategy} has been removed, there are ${stratTrades.length} open trades that will be paused. You can still manually close them in the NBT Hub.`)
             // Send notifications of paused trades
             stratTrades.forEach(trade => 
-                notifyAll(getNotifierMessage(MessageType.WARN, undefined, trade, "The strategy has been removed so this trade will be paused.")).catch((reason) => {
+                notifyAll(getNotifierMessage(MessageType.WARN, undefined, undefined, trade, "The strategy has been removed so this trade will be paused.")).catch((reason) => {
                     logger.silly("checkStrategyChanges->notifyAll: " + reason)
                 })
             )
@@ -494,7 +494,7 @@ function checkStrategyChanges(strategies: Dictionary<Strategy>) {
             logger.warn(`Strategy ${strategy} has been restored, there are ${stratTrades.length} paused trades that will be resumed.`)
             // Send notifications of resumed trades
             stratTrades.forEach(trade => 
-                notifyAll(getNotifierMessage(MessageType.WARN, undefined, trade, "The strategy has been restored so this trade will be resumed.")).catch((reason) => {
+                notifyAll(getNotifierMessage(MessageType.WARN, undefined, undefined, trade, "The strategy has been restored so this trade will be resumed.")).catch((reason) => {
                     logger.silly("checkStrategyChanges->notifyAll: " + reason)
                 })
             )
@@ -537,7 +537,7 @@ async function compareStrategyTrades() {
                     const logMessage = `${getLogName(tradeOpen)} trade is no longer open in the source strategy, you may have missed the close signal.`
                     logger.warn(logMessage)
                     // Send notification that the trade is no longer valid
-                    notifyAll(getNotifierMessage(MessageType.WARN, undefined, tradeOpen, logMessage as string)).catch((reason) => {
+                    notifyAll(getNotifierMessage(MessageType.WARN, undefined, undefined, tradeOpen, logMessage as string)).catch((reason) => {
                         logger.silly("checkOpenTrades->notifyAll: " + reason)
                     })
                 }
@@ -1004,7 +1004,7 @@ function checkOpenTrades() {
                     checkSymbol(trade.symbol, `${getLogName(trade)} trade is no longer valid`, trade.wallet)
                 } catch (reason) {
                     // Send notification that the trade is no longer valid
-                    notifyAll(getNotifierMessage(MessageType.WARN, undefined, trade, reason as string)).catch((reason) => {
+                    notifyAll(getNotifierMessage(MessageType.WARN, undefined, undefined, trade, reason as string)).catch((reason) => {
                         logger.silly("checkOpenTrades->notifyAll: " + reason)
                     })
                 }
@@ -1450,7 +1450,7 @@ export async function executeTradingTask(
                     strategy.isStopped = true
 
                     // Send notifications that strategy is stopped
-                    notifyAll(getNotifierMessage(MessageType.WARN, signal, undefined, logMessage)).catch((reason) => {
+                    notifyAll(getNotifierMessage(MessageType.WARN, undefined, signal, undefined, logMessage)).catch((reason) => {
                         logger.silly("trade->notifyAll: " + reason)
                     })
                 }
@@ -1471,7 +1471,7 @@ export async function executeTradingTask(
     updateBalanceHistory(tradeOpen.tradingType!, market.quote, signal?.entryType, undefined, change, fee)
 
     // Send notifications that trading completed successfully
-    notifyAll(getNotifierMessage(MessageType.SUCCESS, signal, tradeOpen)).catch((reason) => {
+    notifyAll(getNotifierMessage(MessageType.SUCCESS, source, signal, tradeOpen)).catch((reason) => {
         logger.silly("executeTradingTask->notifyAll: " + reason)
     })
 
@@ -1548,7 +1548,7 @@ function scheduleTrade(
             }
 
             // Send notifications that trading failed
-            notifyAll(getNotifierMessage(MessageType.ERROR, signal, tradeOpen, reason)).catch((reason) => {
+            notifyAll(getNotifierMessage(MessageType.ERROR, source, signal, tradeOpen, reason)).catch((reason) => {
                 logger.silly("scheduleTrade->notifyAll: " + reason)
             })
 
@@ -1570,7 +1570,7 @@ export async function trade(signal: Signal, source: SourceType) {
 
     // Notify of incoming signal that we want to process, we will also send a notification once the trade is executed
     // There is no need to wait for this to finish
-    notifyAll(getNotifierMessage(MessageType.INFO, signal)).catch((reason) => {
+    notifyAll(getNotifierMessage(MessageType.INFO, source, signal)).catch((reason) => {
         logger.silly("trade->notifyAll: " + reason)
     })
 

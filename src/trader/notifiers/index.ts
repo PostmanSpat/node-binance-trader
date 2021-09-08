@@ -1,3 +1,4 @@
+import BigNumber from "bignumber.js"
 import { basename } from "path/posix"
 import logger from "../../logger"
 import { EntryType, PositionType, Signal, TradeOpen } from "../types/bva"
@@ -40,6 +41,7 @@ export function notifyAll(notifierMessage: NotifierMessage): Promise<void> {
 
 export function getNotifierMessage(
     messageType: MessageType,
+    source?: SourceType,
     signal?: Signal,
     tradeOpen?: TradeOpen,
     reason?: string
@@ -59,27 +61,31 @@ export function getNotifierMessage(
     
     const content: string[] = [""]
 
+    if (source) {
+        content.push("source: " + source)
+    }
+
     if (signal) {
         content.push("strategy: " + signal.strategyName)
-        content.push("signal price: " + signal.price?.toFixed())
+        content.push("signal price: " + format(signal.price))
         content.push("score: ") + signal.score === "NA" ? "N/A" : signal.score
-        content.push("signal received: " + signal.timestamp.toISOString())
+        content.push("signal received: " + format(signal.timestamp))
     } else if (tradeOpen) {
         // This should only happen when we are re-balancing a LONG trade
         content.push("strategy: " + tradeOpen.strategyName)
     }
 
     if (tradeOpen) {
-        content.push("quantity: " + tradeOpen.quantity.toFixed())
-        content.push("cost: " + tradeOpen.cost?.toFixed())
-        content.push("borrow: " + tradeOpen.borrow?.toFixed())
-        content.push("wallet: " + tradeOpen.wallet)
-        content.push("type: " + tradeOpen.tradingType)
+        content.push("quantity: " + format(tradeOpen.quantity))
+        content.push("cost: " + format(tradeOpen.cost))
+        content.push("borrow: " + format(tradeOpen.borrow))
+        content.push("wallet: " + format(tradeOpen.wallet))
+        content.push("type: " + format(tradeOpen.tradingType))
 
-        content.push("trade buy price: " + tradeOpen.priceBuy?.toFixed())
-        content.push("buy executed: " + tradeOpen.timeBuy?.toISOString())
-        content.push("trade sell price: " + tradeOpen.priceSell?.toFixed())
-        content.push("sell executed: " + tradeOpen.timeSell?.toISOString())
+        content.push("trade buy price: " + format(tradeOpen.priceBuy))
+        content.push("buy executed: " + format(tradeOpen.timeBuy))
+        content.push("trade sell price: " + format(tradeOpen.priceSell))
+        content.push("sell executed: " + format(tradeOpen.timeSell))
     }
 
     if (reason) {
@@ -93,4 +99,22 @@ export function getNotifierMessage(
         content: base + content.join("\n"),
         contentHtml: baseHtml + content.join("<br/>"),
     }
+}
+
+function format(value: BigNumber | Date | String | undefined): String {
+    if (value == undefined) return ""
+
+    if (value instanceof BigNumber) {
+        return value.toFixed(env().MAX_WEB_PRECISION).replace(/\.?0+$/,"")
+    }
+
+    if (value instanceof Date) {
+        return value.toISOString()
+    }
+
+    if (value instanceof String) {
+        return value
+    }
+
+    return String(value)
 }
