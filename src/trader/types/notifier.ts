@@ -13,6 +13,6 @@ export interface NotifierMessage {
 export enum MessageType {
     INFO = "",
     SUCCESS = "SUCCESS!",
-    ERROR = "ERROR!",
-    WARN = "WARNING!"
+    WARN = "WARNING!",
+    ERROR = "ERROR!"
 }
