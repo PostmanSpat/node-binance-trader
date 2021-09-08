@@ -2440,6 +2440,8 @@ async function checkBNBThreshold(wallet: WalletType) {
         // Initialise dictionary, assuming it is ok to start with
         if (!(wallet in Object.keys(BNBState))) BNBState[wallet] = "ok"
 
+        logger.debug(`BNB for ${wallet} was ${BNBState[wallet]}.`)
+
         // Fetch the BNB balance for this wallet
         const balance = (await fetchBalance(wallet))["BNB"]
         logger.debug(`${balance.free} BNB free in ${wallet}.`)
