@@ -22,7 +22,7 @@ export default function initializeNotifiers(): Notifier {
 export function notifyAll(notifierMessage: NotifierMessage): Promise<void> {
     const valLevels = Object.values(MessageType)
     const keyLevels = Object.keys(MessageType)
-    if (valLevels.indexOf(notifierMessage.messageType) > keyLevels.indexOf((env().NOTIFIER_LEVEL as string).toUpperCase())) {
+    if (valLevels.indexOf(notifierMessage.messageType) < keyLevels.indexOf((env().NOTIFIER_LEVEL as string).toUpperCase())) {
         // The level of this message is too low to send, so just return
         return Promise.resolve()
     }
