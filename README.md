@@ -55,7 +55,8 @@ The new features that I have added to the trader include:
   * The default is 0.04 BNB, you can set it to 0 if you only want a warning when it is completely empty, or -1 to disable the check.
 * ***CONFIG:* Estimated Taker Fee**
   * In a typical setup, fees are charged in BNB, therefore they do not affect the balance of the coin used for funding the strategy. So in order to make the calculated PnL more accurate, the estimated fees are calculated based on the spot wallet Taker Fee percentage. It does not currently calculate the interest charged on margin lending.
-  * The default is 0.075%. If you have a higher VIP level or rebate on Binance that entitles you to lower fees, you can modify the Taker Fee percentage within the trader to match.
+  * Unlike other settings, this is represented as a percentage and not a decimal fraction. This means you can just copy and paste the fee directly from Binance.
+  * The default is 0.075(%). If you have a higher VIP level or rebate on Binance that entitles you to lower fees, you can modify the Taker Fee percentage within the trader to match.
 * ***CONFIG:* Minimum Trade Cost Buffer**
   * Sometimes it is possible to get a MIN_NOTIONAL error from Binance if the trade cost is too small. Even though the trader attempts to round up to the minimum cost, slippage in the price can still cause it to fail. So a buffer is used to increase the minimum cost to attempt to avoid this error.
   * The default is 0.2, which is 2% of the minimum cost as defined by Binance.
