@@ -387,7 +387,7 @@ function makeCommands(page: Pages, record: any) : string {
                         for (let wallet of Object.values(WalletType)) {
                             if (wallet == WalletType.MARGIN && !env().IS_TRADE_MARGIN_ENABLED) continue
                             commands += " "
-                            commands += makeButton(`Top Up ${wallet} BNB`, `Are you sure you want to convert some ${crumb[2]} to BNB to top up the float on ${wallet}?`, `${root}topup=${crumb[2]}:${wallet}`)
+                            commands += makeButton(`Top Up ${wallet} BNB`, `Are you sure you want to sell some ${crumb[2]} to buy BNB to top up the float on ${wallet}? Your float level is set to ${env().BNB_FREE_FLOAT} BNB.`, `${root}topup=${crumb[2]}:${wallet}`)
                         }
                     }
                     commands += "</div>"
