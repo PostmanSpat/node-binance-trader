@@ -9,6 +9,7 @@ import {
     amountToPrecision,
     createMarketOrder,
     fetchBalance,
+    fetchTicker,
     getMarginLoans,
     loadMarkets,
     marginBorrow,
@@ -34,6 +35,7 @@ import {
 import { MessageType } from "./types/notifier"
 import { WalletType, TradingData, TradingMetaData, TradingSequence, LongFundsType, WalletData, ActionType, SourceType, Transaction, BalanceHistory } from "./types/trader"
 import { resolve } from "path/posix"
+import { promise } from "ora"
 
 // Standard error messages
 const logDefaultEntryType = "It shouldn't be possible to have an entry type other than enter or exit."
@@ -862,7 +864,7 @@ function checkTradingData(signal: Signal, source: SourceType): TradingData {
         case EntryType.ENTER:
             // Check if strategy has hit the losing trade limit
             if (!strategy || strategy.isStopped) {
-                const logMessage = `Skipping signal as strategy for ${getLogName(signal)} has been stopped, toggle the trade flag in the NBT Hub to restart it.`
+                const logMessage = `Skipping signal as strategy for ${getLogName(signal)} has been stopped.`
                 logger.warn(logMessage)
                 throw logMessage
             }        
@@ -984,6 +986,13 @@ function checkTradingData(signal: Signal, source: SourceType): TradingData {
             // Hopefully this shouldn't happen
             logger.error(logDefaultPositionType)
             throw logDefaultPositionType
+    }
+
+    // TODO: Because BNB has a special purpose for fees, extra logic would be needed to cater for this throughout the trader if used as the quote coin
+    // At time of writing there are no strategies that use BNB as the quote coin
+    if (market.quote == "BNB") {
+        logger.warn(`The trader has not been tested for strategies that use BNB as the quote coin. Some features like estimated fees and PnL will be incorrect. Please contact Spat on Discord.`)
+        // The trade should still execute ok
     }
 
     return {
@@ -1640,13 +1649,14 @@ function rebalanceTrade(tradeOpen: TradeOpen, cost: BigNumber, wallet: WalletDat
         return
     }
 
+    const market = tradingMetaData.markets[tradeOpen.symbol]
+
     // Have to set a sell price so that it can update balances
     // The sell price may have updated from a previous successful rebalance, so we'll use the latest for calculating
-    // TODO: It would be nice to use current market price instead of cost calculated from opening price
+    // TODO: It would be nice to use current market price instead of cost calculated from opening price, but querying ticker data will slow down the process
     if (!tradeOpen.priceSell) tradeOpen.priceSell = tradeOpen.priceBuy
 
     // Calculate the difference in cost and quantity
-    const market = tradingMetaData.markets[tradeOpen.symbol]
     const targetDiffCost = tradeOpen.cost.minus(cost)
     const diffQTY = getLegalQty(targetDiffCost.dividedBy(tradeOpen.priceSell), market, tradeOpen.priceSell)
     // Recalculate the cost as the quantity may have rounded up
@@ -1654,21 +1664,21 @@ function rebalanceTrade(tradeOpen: TradeOpen, cost: BigNumber, wallet: WalletDat
 
     // Make sure any rounding is not taking way more that expected (i.e. more than double)
     if (diffCost.dividedBy(targetDiffCost).isGreaterThan(2)) {
-        logger.warn(`Will not rebalance ${getLogName(tradeOpen)} trade, as the legal trade cost of ${diffCost} ${market.quote} is much higher than the needed ${targetDiffCost} ${market.quote}.`)
+        logger.warn(`Will not rebalance ${getLogName(tradeOpen)} trade because the legal trade cost of ${diffCost} ${market.quote} is much higher than the ${targetDiffCost} ${market.quote} needed.`)
         // Don't want to show this as an error
         return
     }
 
     // Make sure the rebalance would not close the trade
     if (diffQTY.isGreaterThanOrEqualTo(tradeOpen.quantity)) {
-        return `Could not rebalance ${getLogName(tradeOpen)} trade, it would be more than the remaining quantity.`
+        return `Could not rebalance ${getLogName(tradeOpen)} trade because it would be more than the remaining quantity.`
     }
 
     // Make sure any rounding doesn't leave us with a trade that is too small
     const remQty = tradeOpen.quantity.minus(diffQTY)
     const legRemQty = getLegalQty(remQty, market, tradeOpen.priceSell)
     if (legRemQty.isGreaterThan(remQty)) {
-        return `Could not rebalance ${getLogName(tradeOpen)} trade, as the remaining quantity of ${remQty} ${market.base} may be too small to close later.`
+        return `Could not rebalance ${getLogName(tradeOpen)} trade because the remaining quantity of ${remQty} ${market.base} may be too small to close later.`
     }
 
     logger.debug(`Rebalancing ${getLogName(tradeOpen)} trade to reduce by ${diffQTY} ${market.base} and ${diffCost} ${market.quote}.`)
@@ -1705,12 +1715,32 @@ function rebalanceTrade(tradeOpen: TradeOpen, cost: BigNumber, wallet: WalletDat
 
 // Loads the current free balances for each wallet type and calculates the total value from all open trades
 // Also identifies largest and all associated trades for use in rebalancing
-async function loadWalletBalances(tradingType: TradingType, market: Market) {
+async function loadWalletBalances(tradingType: TradingType, market?: Market, quote?: string, wallet?: WalletType): Promise<Dictionary<WalletData>> {
+    // These shouldn't happen, but just to be sure
+    if (!market && !quote) {
+        const logMessage = "Failed to load wallet balances: unknown asset."
+        logger.error(logMessage)
+        return Promise.reject(logMessage)
+    } 
+    if (!market && tradingType == TradingType.virtual) {
+        const logMessage = "Failed to load wallet balances: Market needed for virtual."
+        logger.error(logMessage)
+        return Promise.reject(logMessage)
+    }
+
+    // Default the quote asset from the market data if not specified
+    if (!quote) quote = market!.quote
+
     const wallets: Dictionary<WalletData> = {}
-    // We need to calculate ballances for all wallets because we'll pass them into the balance history later
-    Object.values(WalletType).forEach(w => wallets[w] = new WalletData(w))
-    // Exclude margin if disabled
-    if (!env().IS_TRADE_MARGIN_ENABLED) delete wallets[WalletType.MARGIN]
+    if (wallet) {
+        // Only check the specified wallet
+        wallets[wallet] = new WalletData(wallet)
+    } else {
+        // We need to calculate ballances for all wallets because we'll pass them into the balance history later
+        Object.values(WalletType).forEach(w => wallets[w] = new WalletData(w))
+        // Exclude margin if disabled
+        if (!env().IS_TRADE_MARGIN_ENABLED) delete wallets[WalletType.MARGIN]
+    }
 
     // Get the available balances of each wallet
     for (let wallet of Object.values(wallets)) {
@@ -1719,10 +1749,10 @@ async function loadWalletBalances(tradingType: TradingType, market: Market) {
             wallet.free = new BigNumber((await fetchBalance(wallet.type).catch((reason) => {
                 logger.silly("createTradeOpen->fetchBalance: " + reason)
                 return Promise.reject(reason)
-            }))[market.quote].free) // We're just going to use 'free', but I'm not sure whether 'total' is better
+            }))[quote].free) // We're just going to use 'free', but I'm not sure whether 'total' is better
         } else {
-            initialiseVirtualBalances(wallet.type, market)
-            wallet.free = tradingMetaData.virtualBalances[wallet.type][market.quote]
+            initialiseVirtualBalances(wallet.type, market!)
+            wallet.free = tradingMetaData.virtualBalances[wallet.type][quote]
         }
     }
 
@@ -1733,13 +1763,13 @@ async function loadWalletBalances(tradingType: TradingType, market: Market) {
         // Ideally wallet and cost should have been initialised by now (but need to check to satisfy the compiler), also we may not be using one of the wallets for this trade
         if (trade.wallet && trade.cost && wallets[trade.wallet]) {
             // If the existing trade and this new signal share the same quote currency (e.g. both accumulating BTC)
-            if (tradingMetaData.markets[trade.symbol].quote == market.quote) {
+            if (tradingMetaData.markets[trade.symbol].quote == quote) {
                 // SHORT trades artificially increase the funds in margin until they are closed, so these need to be subtracted from the free balance
                 // Technically we could probably still use it for LONG trades if they were closed before the SHORT trade, but it would be a big gamble
                 // We don't exactly know how much will be needed for the SHORT trade, hopefully it is less than the opening price but it could be higher
                 // Also, there may be LONG trades that have not yet been processed in the queue so the wallets won't reflect the actual end state when this trade will process
                 if ((trade.positionType == PositionType.SHORT && trade.isExecuted) || (trade.positionType == PositionType.LONG && !trade.isExecuted)) {
-                    logger.debug(`${trade.cost.toFixed()} ${market.quote} are allocated to a ${trade.symbol} ${trade.positionType} trade that has ${!trade.isExecuted ? "not " : ""}been executed.`)
+                    logger.debug(`${trade.cost.toFixed()} ${quote} are allocated to a ${trade.symbol} ${trade.positionType} trade that has ${!trade.isExecuted ? "not " : ""}been executed.`)
                     wallets[trade.wallet].free = wallets[trade.wallet].free.minus(trade.cost)
                 }
 
@@ -1762,9 +1792,9 @@ async function loadWalletBalances(tradingType: TradingType, market: Market) {
                 }
             }
             // If there is a different strategy that is using a different quote currency, but with open LONG trades sharing this base currency
-            else if (tradingMetaData.markets[trade.symbol].base == market.quote && trade.positionType == PositionType.LONG && trade.isExecuted) {
+            else if (tradingMetaData.markets[trade.symbol].base == quote && trade.positionType == PositionType.LONG && trade.isExecuted) {
                 // We cannot use that purchased quantity as part of the balance because it may soon be sold
-                logger.debug(`${trade.quantity.toFixed()} ${market.quote} are allocated to a ${trade.symbol} ${trade.positionType} trade that has been executed.`)
+                logger.debug(`${trade.quantity.toFixed()} ${quote} are allocated to a ${trade.symbol} ${trade.positionType} trade that has been executed.`)
                 wallets[trade.wallet].free = wallets[trade.wallet].free.minus(trade.quantity)
             }
         }
@@ -1776,13 +1806,13 @@ async function loadWalletBalances(tradingType: TradingType, market: Market) {
         // Also, there is a slight possibility that the trade will try to open and close before executing, these can be ignored because the balance won't change
         if (trade.cost && trade.wallet && wallets[trade.wallet] && trade.positionType == PositionType.LONG && trade.isExecuted) {
             // If sharing the same quote currency, this could be normal trades or rebalancing trades
-            if (tradingMetaData.markets[trade.symbol].quote == market.quote) {
-                logger.debug(`${trade.cost.toFixed()} ${market.quote} will be released by a ${trade.symbol} ${trade.positionType} trade that is waiting to sell.`)
+            if (tradingMetaData.markets[trade.symbol].quote == quote) {
+                logger.debug(`${trade.cost.toFixed()} ${quote} will be released by a ${trade.symbol} ${trade.positionType} trade that is waiting to sell.`)
                 // Assume the trade will be successful and free up the funds before this new one
                 wallets[trade.wallet].free = wallets[trade.wallet].free.plus(trade.cost)
-            } else if (tradingMetaData.markets[trade.symbol].base == market.quote && !tradingMetaData.tradesOpen.includes(trade)) {
+            } else if (tradingMetaData.markets[trade.symbol].base == quote && !tradingMetaData.tradesOpen.includes(trade)) {
                 // Rebalancing trades aren't in the main set so we didn't see them above, but they could also be trying to sell the base currency too
-                logger.debug(`${trade.quantity.toFixed()} ${market.quote} are allocated to a ${trade.symbol} ${trade.positionType} trade that is waiting to sell.`)
+                logger.debug(`${trade.quantity.toFixed()} ${quote} are allocated to a ${trade.symbol} ${trade.positionType} trade that is waiting to sell.`)
                 wallets[trade.wallet].free = wallets[trade.wallet].free.minus(trade.quantity)
             }
         }
@@ -1794,8 +1824,9 @@ async function loadWalletBalances(tradingType: TradingType, market: Market) {
         wallet.total = wallet.free.plus(wallet.locked)
         totalBalance = totalBalance.plus(wallet.total)
 
-        let logMessage = `Actual ${wallet.type} total of ${wallet.total} ${market.quote} is made up of ${wallet.free.toFixed()} free and ${wallet.locked.toFixed()} locked`
-        if (env().WALLET_BUFFER) {
+        let logMessage = `Actual ${wallet.type} total of ${wallet.total} ${quote} is made up of ${wallet.free.toFixed()} free and ${wallet.locked.toFixed()} locked`
+        // If not called from an opening trade then we won't apply the buffer
+        if (market && env().WALLET_BUFFER) {
             const buffer = wallet.total.multipliedBy(env().WALLET_BUFFER)
             wallet.free = wallet.free.minus(buffer)
             wallet.total = wallet.total.minus(buffer)
@@ -1804,9 +1835,13 @@ async function loadWalletBalances(tradingType: TradingType, market: Market) {
         logger.debug(`${logMessage}.`)
     })
 
-    // We only look at the balances when opening a trade, so keep them for the history
-    // Don't send the entry type because it will be called again when the trade executes
-    updateBalanceHistory(tradingType, market.quote, undefined, totalBalance)
+    // If not called from an opening trade then there will be no market data, so may not be a quote asset we're tracking
+    // Also only want to update balances when all wallets have been loaded
+    if (market && !wallet) {
+        // We only look at the balances when opening a trade, so keep them for the history
+        // Don't send the entry type because it will be called again when the trade executes
+        updateBalanceHistory(tradingType, quote, undefined, totalBalance)
+    }
 
     return Promise.resolve(wallets)
 }
@@ -2172,13 +2207,15 @@ function initialiseVirtualBalances(walletType: WalletType, market: Market) {
     }
 }
 
-// Just clears the Balance History for a given coin, will clear both real and virtual
-export function deleteBalanceHistory(asset: string): string[] {
+// Just clears the Balance History for a given coin, will clear both real and virtual if trading type is not specified
+export function deleteBalanceHistory(asset: string, tradingType?: TradingType): string[] {
     const result: string[] = []
-    for (let tradingType of Object.keys(tradingMetaData.balanceHistory)) {
-        if (asset in tradingMetaData.balanceHistory[tradingType]) {
-            delete tradingMetaData.balanceHistory[tradingType][asset]
-            result.push(tradingType)
+    for (let tt of Object.keys(tradingMetaData.balanceHistory)) {
+        if (!tradingType || tt == tradingType) {
+            if (asset in tradingMetaData.balanceHistory[tt]) {
+                delete tradingMetaData.balanceHistory[tt][asset]
+                result.push(tt)
+            }
         }
     }
     if (result.length) saveState("virtualBalances")
@@ -2336,7 +2373,23 @@ export function setTradeStopped(tradeId: string, stop: boolean): string | undefi
             logger.info(`Resuming ${getLogName(tradeOpen)} trade.`)
         }
         tradeOpen.isStopped = stop
+        saveState("tradesOpen")
         return getLogName(tradeOpen)
+    }
+}
+
+// Used by the web server to allow users to stop and start strategies manually
+export function setStrategyStopped(stratId: string, stop: boolean): string | undefined {
+    const strategy = tradingMetaData.strategies[stratId]
+    if (strategy) {
+        if (stop) {
+            logger.info(`Stopping ${getLogName(strategy)} strategy.`)
+        } else {
+            logger.info(`Resuming ${getLogName(strategy)} strategy.`)
+        }
+        strategy.isStopped = stop
+        saveState("strategies")
+        return getLogName(strategy)
     }
 }
 
@@ -2440,16 +2493,16 @@ async function checkBNBThreshold(wallet: WalletType) {
         // Initialise dictionary, assuming it is ok to start with
         if (!(wallet in BNBState)) BNBState[wallet] = "ok"
 
-        // Fetch the BNB balance for this wallet
-        const balance = (await fetchBalance(wallet))["BNB"]
+        // Fetch the BNB balance for this wallet and calculate how much is free
+        const balance = (await loadWalletBalances(TradingType.real, undefined, "BNB", wallet))[wallet]
         logger.debug(`${balance.free} BNB free in ${wallet}.`)
-        if (balance.free <= env().BNB_FREE_THRESHOLD) {
+        if (balance.free.isLessThanOrEqualTo(env().BNB_FREE_THRESHOLD)) {
             // Check if the low balance hasn't already been reported
-            if (BNBState[wallet] == "ok" || (BNBState[wallet] == "low" && balance.free <= 0)) {
+            if (BNBState[wallet] == "ok" || (BNBState[wallet] == "low" && balance.free.isLessThanOrEqualTo(0))) {
                 // Log the low balance warning or error for empty balance
                 let notifyLevel = MessageType.WARN
                 let logMessage = `Your ${wallet} wallet only has ${balance.free} BNB free. You may need to top it up.`
-                if (balance.free <= 0) {
+                if (balance.free.isLessThanOrEqualTo(0)) {
                     BNBState[wallet] = "empty"
                     notifyLevel = MessageType.ERROR
                     logMessage = `Your ${wallet} wallet has no free BNB. You will need to top it up now.`
@@ -2471,6 +2524,105 @@ async function checkBNBThreshold(wallet: WalletType) {
     }
 }
 
+// Calculates how much BNB is needed to restore the float then executes a trade to convert a chosen coin to BNB for that amount
+// If successful, the cost of the trade
+export async function topUpBNBFloat(wallet: WalletType, quote: string): Promise<string> {
+    logger.info(`BNB top up requested on ${wallet}.`)
+
+    const logPrefix = `Cannot top up BNB on ${wallet} because `
+
+    if (env().BNB_FREE_FLOAT <= 0) {
+        // This shouldn't happen
+        const logMessage = logPrefix + `BNB top up float is disabled.`
+        logger.error(logMessage)
+        return Promise.reject(logMessage)
+    }
+
+    if (wallet == WalletType.MARGIN && !env().IS_TRADE_MARGIN_ENABLED) {
+        // This shouldn't happen
+        const logMessage = logPrefix + `trading is disabled.`
+        logger.error(logMessage)
+        return Promise.reject(logMessage)
+    }
+
+    const market = tradingMetaData.markets["BNB" + quote]
+    if (!market) {
+        const logMessage = logPrefix + `there is no market data for BNB/${quote}.`
+        logger.error(logMessage)
+        return Promise.reject(logMessage)
+    }
+
+    if (!market[wallet]) {
+        const logMessage = logPrefix + `trading is not allowed for ${market.symbol}.`
+        logger.error(logMessage)
+        return Promise.reject(logMessage)
+    }
+
+    // Fetch BNB balances for this wallet and calculate how much is free
+    const bnbBalance = (await loadWalletBalances(TradingType.real, undefined, "BNB", wallet))[wallet]
+
+    if (bnbBalance.free.isGreaterThanOrEqualTo(env().BNB_FREE_FLOAT)) {
+        const logMessage = logPrefix + `there is already enough free, increase the float if you want to have more.`
+        logger.warn(logMessage)
+        return Promise.reject(logMessage)
+    }
+
+    // Get the latest buy price
+    const price = new BigNumber((await fetchTicker(market)).bid)
+
+    if (!price.isGreaterThan(0)) {
+        const logMessage = logPrefix + `the current price is invalid.`
+        logger.error(logMessage)
+        return Promise.reject(logMessage)
+    }
+
+    // Calculate the legal trade quantity
+    const needed = new BigNumber(env().BNB_FREE_FLOAT).minus(bnbBalance.free)
+    const qty = getLegalQty(needed, market, price)
+
+    // Due to minimum trade size the legal quanity might be significantly higher than needed
+    if (qty.minus(needed).dividedBy(needed).isGreaterThan(2)) {
+        const logMessage = logPrefix + `the legal trade cost of ${qty} BNB is much higher than the ${needed} BNB needed to reach the float, increase the float if you want to have more.`
+        logger.warn(logMessage)
+        return Promise.reject(logMessage)
+    }
+
+    // Fetch quote balances for this wallet and calculate how much is free
+    const quoteBalance = (await loadWalletBalances(TradingType.real, undefined, quote, wallet))[wallet]
+
+    // Calculate the quote cost
+    const cost = qty.multipliedBy(price)
+
+    if (cost.isGreaterThan(quoteBalance.free)) {
+        const logMessage = logPrefix + `there needs to be at least ${cost} ${quote} free to complete the trade.`
+        logger.error(logMessage)
+        return Promise.reject(logMessage)
+    }
+
+    // Execute the market buy order
+    const result = await createMarketOrder(market.symbol, "buy", qty, wallet).catch(reason => {
+        const logMessage = logPrefix + `an error occurred: ${reason}`
+        logger.error(logMessage)
+        return Promise.reject(logMessage)
+    })
+
+    if (result.status == "closed") {
+        const logMessage = `Successfully bought ${result.amount} BNB for ${result.cost} ${quote} on ${wallet}.`
+        logger.info(logMessage)
+
+        // Send an offset fee to the balance history
+        // Technically there are also fees for this conversion, but as we're not recording this transaction we'll ignore them
+        updateBalanceHistory(TradingType.real, quote, undefined, undefined, new BigNumber(0-result.cost), new BigNumber(result.cost))
+        // TODO: if a strategy ever trades in BNB then we may need to update its balances too
+
+        return logMessage
+    } else {
+        const logMessage = logPrefix + `result status was: ${result.status}`
+        logger.error(logMessage)
+        return Promise.reject(logMessage)
+    }
+}
+
 // Main function to start the trader
 async function run() {
     logger.info(`NBT Trader v${env().VERSION} is starting...`)
@@ -2489,6 +2641,8 @@ async function run() {
     if (env().STRATEGY_LOSS_LIMIT < 0) issues.push("STRATEGY_LOSS_LIMIT must be 0 or more.")
     if (!Number.isInteger(env().STRATEGY_LOSS_LIMIT)) issues.push("STRATEGY_LOSS_LIMIT must be a whole number.")
     if (env().VIRTUAL_WALLET_FUNDS <= 0) issues.push("VIRTUAL_WALLET_FUNDS must be greater than 0.")
+    if (env().BNB_FREE_FLOAT < 0) issues.push("BNB_FREE_FLOAT must be 0 or more.")
+    if (env().BNB_FREE_THRESHOLD > 0 && env().BNB_FREE_FLOAT > 0 && env().BNB_FREE_FLOAT <= env().BNB_FREE_THRESHOLD) issues.push("BNB_FREE_FLOAT must be more than BNB_FREE_THRESHOLD.")
     if (env().TAKER_FEE_PERCENT < 0) issues.push("TAKER_FEE_PERCENT must be 0 or more.")
     if (env().MIN_COST_BUFFER < 0) issues.push("MIN_COST_BUFFER must be 0 or more.")
     if (!env().IS_TRADE_MARGIN_ENABLED && env().PRIMARY_WALLET == WalletType.MARGIN) issues.push(`PRIMARY_WALLET cannot be ${WalletType.MARGIN} if IS_TRADE_MARGIN_ENABLED is false.`)

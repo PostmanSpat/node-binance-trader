@@ -53,6 +53,11 @@ The new features that I have added to the trader include:
 * ***CONFIG:* BNB Free Threshold**
   * After a trade is closed it will check your remaining BNB balance and generate a warning if it has dropped below this threshold. This helps you to manage your BNB balance so that there are always sufficient funds to cover fees and interest. These warnings will be displayed in the log and also sent using the notification systems. It will check the spot and margin wallets independently.
   * The default is 0.04 BNB, you can set it to 0 if you only want a warning when it is completely empty, or -1 to disable the check.
+* ***CONFIG:* BNB Free Top Up Float**
+  * You can set a float level for your free BNB balance, then once your BNB balance drops below this level you can use the top up feature on the PnL Web Diagnostics page. This will convert the chosen coin to BNB to increase the free balance to the float level. There are separate buttons for each wallet.
+  * It is better to use this option rather than converting manually through Binance so that the trader can adjust the PnL for the change in balance. It does this by offsetting the fees in the balance history.
+  * BNB top ups will not appear in the transactions list.
+  * The default is 0.1 BNB, you can set it to 0 if you do not want to allow the top up feature.
 * ***CONFIG:* Estimated Taker Fee**
   * In a typical setup, fees are charged in BNB, therefore they do not affect the balance of the coin used for funding the strategy. So in order to make the calculated PnL more accurate, the estimated fees are calculated based on the spot wallet Taker Fee percentage. It does not currently calculate the interest charged on margin lending.
   * Unlike other settings, this is represented as a percentage and not a decimal fraction. This means you can just copy and paste the fee directly from Binance.
@@ -74,8 +79,11 @@ The new features that I have added to the trader include:
     * **/log** - Internal log currently held in memory (newest entries at the top).
     * **/log?db=1** - Internal log loaded from the database (newest entries at the top).
     * **/pnl** - Calculated rate of return and history of open and close balances (best estimation based on available data).
-    * **/pnl?reset=** - Specify a coin to clear the Balance History and PnL for that coin (e.g. ?reset=BTC). This is useful if you have manually added or removed funds in Binance. Note that it will clear both real and virtual history at the same time, if you only want to clear virtual history then use the the **/virtual?reset=true** command.
+    * **/pnl?reset=** - Specify a coin and trading type to clear the Balance History and PnL for that coin and type (e.g. ?reset=BTC:virtual).
+    * **/pnl?topup=** - Specify a coin and wallet to buy BNB to top up the float (e.g. ?topup=BTC:spot).
     * **/strategies** - Configured strategies.
+    * **/strategies?stop=** - Specify a strategy ID to shut down trading, this will still allow open trades to close automatically but only when the signal price is a profit.
+    * **/strategies?start=** - Specify a strategy ID to resume normal trading.
     * **/trades** - Current open trades list.
     * **/trades?stop=** - Specify a trade ID to stop trading, this will keep the trade open but ignore close signals from the NBT Hub.
     * **/trades?start=** - Specify a trade ID to resume trading, this will accept the next close signal from the NBT Hub.
