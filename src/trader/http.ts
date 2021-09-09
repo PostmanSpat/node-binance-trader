@@ -383,7 +383,7 @@ function makeCommands(page: Pages, record: any) : string {
                 if (crumb[0] == "Balance History") {
                     commands += "<div>"
                     commands += makeButton("Reset", `Are you sure you want to delete the ${crumb[1]} PnL and balance history for ${crumb[2]}?`, `${root}reset=${crumb[2]}:${crumb[1]}`)
-                    if (env().BNB_FREE_FLOAT > 0 && crumb[1] as TradingType == TradingType.real) {
+                    if (env().BNB_FREE_FLOAT > 0 && crumb[1] as TradingType == TradingType.real && crumb[2] != "BNB") {
                         for (let wallet of Object.values(WalletType)) {
                             if (wallet == WalletType.MARGIN && !env().IS_TRADE_MARGIN_ENABLED) continue
                             commands += " "
