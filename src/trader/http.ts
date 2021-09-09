@@ -3,12 +3,13 @@ import express from "express"
 
 import logger, { loggerOutput } from "../logger"
 import env from "./env"
-import { closeTrade, deleteBalanceHistory, deleteTrade, resetVirtualBalances, setTradeStopped, setVirtualWalletFunds, tradingMetaData} from "./trader"
+import { closeTrade, deleteBalanceHistory, deleteTrade, resetVirtualBalances, setStrategyStopped, setTradeStopped, setVirtualWalletFunds, topUpBNBFloat, tradingMetaData} from "./trader"
 import { Dictionary } from "ccxt"
-import { BalanceHistory } from "./types/trader"
+import { BalanceHistory, WalletType } from "./types/trader"
 import BigNumber from "bignumber.js"
 import { loadRecords } from "./apis/postgres"
 import { Pages, Percent, URLs } from "./types/http"
+import { Strategy, TradeOpen, TradingType } from "./types/bva"
 
 export default function startWebserver(): http.Server {
     const webserver = express()
@@ -17,7 +18,7 @@ export default function startWebserver(): http.Server {
     )
     // Allow user to see open trades or delete a trade
     webserver.get("/trades", (req, res) => {
-        if (Authenticate(req, res)) {
+        if (authenticate(req, res)) {
             if (req.query.stop) {
                 const tradeId = req.query.stop.toString()
                 const tradeName = setTradeStopped(tradeId, true)
@@ -51,17 +52,37 @@ export default function startWebserver(): http.Server {
                     res.send(`No trade was found with the ID of '${tradeId}'.`)
                 }
             } else {
-                res.send(HTMLTableFormat(Pages.TRADES, tradingMetaData.tradesOpen))
+                res.send(formatHTMLTable(Pages.TRADES, tradingMetaData.tradesOpen))
             }
         }
     })
     // Allow user to see configured strategies
     webserver.get("/strategies", (req, res) => {
-        if (Authenticate(req, res)) res.send(HTMLTableFormat(Pages.STRATEGIES, Object.values(tradingMetaData.strategies)))
+        if (authenticate(req, res)) {
+            if (req.query.stop) {
+                const stratId = req.query.stop.toString()
+                const stratName = setStrategyStopped(stratId, true)
+                if (stratName) {
+                    res.send(`${stratName} has been stopped.`)
+                } else {
+                    res.send(`No strategy was found with the ID of '${stratId}'.`)
+                }
+            } else if (req.query.start) {
+                const stratId = req.query.start.toString()
+                const stratName = setStrategyStopped(stratId, false)
+                if (stratName) {
+                    res.send(`${stratName} will continue to trade.`)
+                } else {
+                    res.send(`No strategy was found with the ID of '${stratId}'.`)
+                }
+            } else {
+                res.send(formatHTMLTable(Pages.STRATEGIES, Object.values(tradingMetaData.strategies)))
+            }
+        }
     })
     // Allow user to see, reset, and change virtual balances
     webserver.get("/virtual", (req, res) => {
-        if (Authenticate(req, res)) {
+        if (authenticate(req, res)) {
             if (req.query.reset) {
                 const value = new BigNumber(req.query.reset.toString())
                 if (value.isGreaterThan(0)) {
@@ -73,42 +94,43 @@ export default function startWebserver(): http.Server {
                 resetVirtualBalances()
                 res.send("Virtual balances have been reset.")
             } else {
-                res.send(HTMLFormat(Pages.VIRTUAL, tradingMetaData.virtualBalances))
+                res.send(formatHTML(Pages.VIRTUAL, tradingMetaData.virtualBalances))
             }
         } 
     })
     // Allow user to see in memory or database log
     webserver.get("/log", async (req, res) => {
-        if (Authenticate(req, res)) {
+        if (authenticate(req, res)) {
             if (Object.keys(req.query).includes("db")) {
                 let page = req.query.db ? Number.parseInt(req.query.db.toString()) : 1
                 // Load the log from the database
-                res.send(HTMLFormat(Pages.LOG_DB, (await loadRecords("log", page)).join("\r\n"), page+1))
+                res.send(formatHTML(Pages.LOG_DB, (await loadRecords("log", page)).join("\r\n"), page+1))
             } else {
                 // Use the memory log, exclude blank lines (i.e. the latest one)
-                res.send(HTMLFormat(Pages.LOG_MEMORY, loggerOutput.filter(line => line).reverse().join("\r\n")))
+                res.send(formatHTML(Pages.LOG_MEMORY, loggerOutput.filter(line => line).reverse().join("\r\n")))
             }
         }
     })
     // Allow user to see in memory or database transactions
     webserver.get("/trans", async (req, res) => {
-        if (Authenticate(req, res)) {
+        if (authenticate(req, res)) {
             if (Object.keys(req.query).includes("db")) {
                 let page = req.query.db ? Number.parseInt(req.query.db.toString()) : 1
                 // Load the transactions from the database
-                res.send(HTMLTableFormat(Pages.TRANS_DB, (await loadRecords("transaction", page)), page+1))
+                res.send(formatHTMLTable(Pages.TRANS_DB, (await loadRecords("transaction", page)), page+1))
             } else {
                 // Use the memory transactions
-                res.send(HTMLTableFormat(Pages.TRANS_MEMORY, tradingMetaData.transactions.slice().reverse(), ))
+                res.send(formatHTMLTable(Pages.TRANS_MEMORY, tradingMetaData.transactions.slice().reverse(), ))
             }
         }
     })
-    // Allow user to see actual PnL and daily balances for the past year, or reset balances for a coin
+    // Allow user to see actual PnL and daily balances for the past year, or reset balances for a coin, or top up BNB
     webserver.get("/pnl", (req, res) => {
-        if (Authenticate(req, res)) {
+        if (authenticate(req, res)) {
             if (req.query.reset) {
-                const asset = req.query.reset.toString().toUpperCase()
-                const tradingTypes = deleteBalanceHistory(asset)
+                const parts = req.query.reset.toString().split(":")
+                const asset = parts[0].toUpperCase()
+                const tradingTypes = deleteBalanceHistory(asset, parts[1] as TradingType)
                 if (tradingTypes.length) {
                     let result = ""
                     for (let tradingType of tradingTypes) {
@@ -118,6 +140,14 @@ export default function startWebserver(): http.Server {
                 } else {
                     res.send(`No balance history found for ${asset}.`)
                 }
+            } else if (req.query.topup) {
+                const parts = req.query.topup.toString().split(":")
+                const asset = parts[0].toUpperCase()
+                topUpBNBFloat(parts[1] as WalletType, asset).then((result) => {
+                    res.send(result)
+                }).catch(reason => {
+                    res.send(reason)
+                })
             } else {
                 const pnl: Dictionary<Dictionary<{}>> = {}
                 const now = new Date()
@@ -125,15 +155,15 @@ export default function startWebserver(): http.Server {
                     pnl[tradingType] = {}
                     for (let coin of Object.keys(tradingMetaData.balanceHistory[tradingType])) {
                         pnl[tradingType][coin] = [
-                            PercentageChange("Today", tradingMetaData.balanceHistory[tradingType][coin].filter(h => h.date >= new Date(now.getFullYear(), now.getMonth(), now.getDate()))),
-                            PercentageChange("Seven Days", tradingMetaData.balanceHistory[tradingType][coin].filter(h => h.date >= new Date(now.getFullYear(), now.getMonth(), now.getDate()-6))),
-                            PercentageChange("Thirty Days", tradingMetaData.balanceHistory[tradingType][coin].filter(h => h.date >= new Date(now.getFullYear(), now.getMonth(), now.getDate()-29))),
-                            PercentageChange("180 Days", tradingMetaData.balanceHistory[tradingType][coin].filter(h => h.date >= new Date(now.getFullYear(), now.getMonth(), now.getDate()-179))),
-                            PercentageChange("Total", tradingMetaData.balanceHistory[tradingType][coin]),
+                            percentageChange("Today", tradingMetaData.balanceHistory[tradingType][coin].filter(h => h.date >= new Date(now.getFullYear(), now.getMonth(), now.getDate()))),
+                            percentageChange("Seven Days", tradingMetaData.balanceHistory[tradingType][coin].filter(h => h.date >= new Date(now.getFullYear(), now.getMonth(), now.getDate()-6))),
+                            percentageChange("Thirty Days", tradingMetaData.balanceHistory[tradingType][coin].filter(h => h.date >= new Date(now.getFullYear(), now.getMonth(), now.getDate()-29))),
+                            percentageChange("180 Days", tradingMetaData.balanceHistory[tradingType][coin].filter(h => h.date >= new Date(now.getFullYear(), now.getMonth(), now.getDate()-179))),
+                            percentageChange("Total", tradingMetaData.balanceHistory[tradingType][coin]),
                         ]
                     }
                 }
-                res.send(HTMLTableFormat(Pages.PNL, {"Profit and Loss": pnl, "Balance History": tradingMetaData.balanceHistory}))
+                res.send(formatHTMLTable(Pages.PNL, {"Profit and Loss": pnl, "Balance History": tradingMetaData.balanceHistory}))
             }
         }
     })
@@ -142,7 +172,7 @@ export default function startWebserver(): http.Server {
     )
 }
 
-function Authenticate(req: any, res: any): boolean {
+function authenticate(req: any, res: any): boolean {
     if (env().WEB_PASSWORD) {
         if (Object.keys(req.query).includes(env().WEB_PASSWORD)) return true
 
@@ -157,7 +187,7 @@ function Authenticate(req: any, res: any): boolean {
     return true
 }
 
-function HTMLFormat(page: Pages, data: any, nextPage?: number): string {
+function formatHTML(page: Pages, data: any, nextPage?: number): string {
     let html = `<html><head><title>NBT: ${page}</title></head><body>`
 
     // Menu
@@ -171,6 +201,9 @@ function HTMLFormat(page: Pages, data: any, nextPage?: number): string {
     }).join(" | ")
     html += `<br><font size=-2>${new Date().toLocaleString()}</font>`
     html += `</p>`
+
+    // Commands
+    html += makeCommands(page, undefined)
 
     // Content
     if (data) {
@@ -187,7 +220,7 @@ function HTMLFormat(page: Pages, data: any, nextPage?: number): string {
     return html + `</body></html>`
 }
 
-function HTMLTableFormat(page: Pages, data: any, nextPage?: number, breadcrumb?: string): string {
+function formatHTMLTable(page: Pages, data: any, nextPage?: number, breadcrumb?: string): string {
     let result = ""
 
     // Just in case
@@ -196,7 +229,7 @@ function HTMLTableFormat(page: Pages, data: any, nextPage?: number, breadcrumb?:
     if (!Array.isArray(data)) {
         if (!breadcrumb) breadcrumb = ""
         for (let section of Object.keys(data)) {
-            result += HTMLTableFormat(page, data[section], nextPage, breadcrumb + section + " : ")
+            result += formatHTMLTable(page, data[section], nextPage, breadcrumb + section + " : ")
         }
     } else {
         if (data.length) {
@@ -223,8 +256,8 @@ function HTMLTableFormat(page: Pages, data: any, nextPage?: number, breadcrumb?:
                 if (valueSets[col].size <= env().MAX_WEB_COLOURS) values[col] = [...valueSets[col]].sort()
             })
 
-            // Add breadcrumb header
-            if (breadcrumb) result += `<h2>${breadcrumb}</h2>`
+            // Add breadcrumb header with any buttons
+            if (breadcrumb) result += `<h2>${breadcrumb}${makeCommands(page, breadcrumb)}</h2>`
 
             // Add table headers before first row
             result += "<table border=1 cellspacing=0><tr>"
@@ -255,14 +288,14 @@ function HTMLTableFormat(page: Pages, data: any, nextPage?: number, breadcrumb?:
                         if (typeof(row[col]) == "boolean" && row[col]) result += " style='color: blue;'"
 
                         // Colour string as a gradient based on unique values (too many colours get meaningless)
-                        if (typeof(row[col]) == "string" && row[col] && col in values) result += ` style='color: ${MakeColor(values[col].indexOf(row[col]), values[col].length)};'`
+                        if (typeof(row[col]) == "string" && row[col] && col in values) result += ` style='color: ${makeColor(values[col].indexOf(row[col]), values[col].length)};'`
 
                         result += ">"
                         if (row[col] != undefined) result += row[col]
                     }
                     result += "</td>"
                 }
-                result += "<td>" + MakeCommands(page, row) + "</td>"
+                result += "<td>" + makeCommands(page, row) + "</td>"
                 result += "</tr>"
             }
             if (result != "") {
@@ -272,13 +305,13 @@ function HTMLTableFormat(page: Pages, data: any, nextPage?: number, breadcrumb?:
     }
     if (!breadcrumb) {
         // This is top level, so wrap in HTML page
-        return HTMLFormat(page, result, nextPage)
+        return formatHTML(page, result, nextPage)
     } else {
         return result
     }
 }
 
-function PercentageChange(period: string, history: BalanceHistory[]): {} {
+function percentageChange(period: string, history: BalanceHistory[]): {} {
     if (history.length) {
         const open = history[0].openBalance
         const close = history[history.length-1].closeBalance
@@ -303,37 +336,84 @@ function PercentageChange(period: string, history: BalanceHistory[]): {} {
     }
 }
 
-function MakeColor(n: number, total: number): string {
+function makeColor(n: number, total: number): string {
     if (total <= 1) return "black"
 
     // Offset to start with blue, darken a bit for readability
     return `hsl(${(225 + (n * (360 / total))) % 360}, 100%, 40%)`
 }
 
-function MakeCommands(page: Pages, record: any) : string {
+function makeCommands(page: Pages, record: any) : string {
     let commands = ""
     let root = URLs[page]
     if (env().WEB_PASSWORD) root += env().WEB_PASSWORD + "&"
-    switch (page) {
-        case (Pages.TRADES):
-            if (!record.isStopped) {
-                commands += MakeButton("Stop", `Are you sure you want to stop trade ${record.id}?`, `${root}stop=${record.id}`)
-            } else {
-                commands += MakeButton("Resume", `Are you sure you want to resume trade ${record.id}?`, `${root}start=${record.id}`)
+    switch (typeof record) {
+        case "object":
+            // Table row buttons
+            switch (page) {
+                case Pages.TRADES:
+                    const tradeOpen = record as TradeOpen
+                    if (!tradeOpen.isStopped) {
+                        commands += makeButton("Stop", `Are you sure you want to stop trade ${tradeOpen.id}?`, `${root}stop=${tradeOpen.id}`)
+                    } else {
+                        commands += makeButton("Resume", `Are you sure you want to resume trade ${tradeOpen.id}?`, `${root}start=${tradeOpen.id}`)
+                    }
+                    commands += " "
+                    commands += makeButton("Close", `Are you sure you want to close trade ${tradeOpen.id}?`, `${root}close=${tradeOpen.id}`)
+                    commands += " "
+                    commands += makeButton("Delete", `Are you sure you want to delete trade ${tradeOpen.id}?`, `${root}delete=${tradeOpen.id}`)
+                    break
+                case Pages.STRATEGIES:
+                    const strategy = record as Strategy
+                    if (!strategy.isStopped) {
+                        commands += makeButton("Shut Down", `Are you sure you want to shut down strategy ${strategy.id}? Existing open trades will only close for profit.`, `${root}stop=${strategy.id}`)
+                    } else {
+                        commands += makeButton("Resume", `Are you sure you want to resume strategy ${strategy.id}? Loss Trade Run will not reset until there is a winning trade, or you remove and add the strategy from the NBT Hub.`, `${root}start=${strategy.id}`)
+                    }
+                    commands += " "
+                    commands += makeButton("BVA", "", `https://bitcoinvsalts.com/strat/${strategy.id}`, "_blank")
+                    break
             }
-            commands += " "
-            commands += MakeButton("Close", `Are you sure you want to close trade ${record.id}?`, `${root}close=${record.id}`)
-            commands += " "
-            commands += MakeButton("Delete", `Are you sure you want to delete trade ${record.id}?`, `${root}delete=${record.id}`)
+            break
+        case "string":
+            // Breadcrumb buttons
+            switch (page) {
+                case Pages.PNL:
+                const crumb = record.split(" : ")
+                if (crumb[0] == "Balance History") {
+                    commands += "<div>"
+                    commands += makeButton("Reset", `Are you sure you want to delete the ${crumb[1]} PnL and balance history for ${crumb[2]}?`, `${root}reset=${crumb[2]}:${crumb[1]}`)
+                    if (env().BNB_FREE_FLOAT > 0 && crumb[1] as TradingType == TradingType.real) {
+                        for (let wallet of Object.values(WalletType)) {
+                            if (wallet == WalletType.MARGIN && !env().IS_TRADE_MARGIN_ENABLED) continue
+                            commands += " "
+                            commands += makeButton(`Top Up ${wallet} BNB`, `Are you sure you want to convert some ${crumb[2]} to BNB to top up the float on ${wallet}?`, `${root}topup=${crumb[2]}:${wallet}`)
+                        }
+                    }
+                    commands += "</div>"
+                }
+                break
+            }
+            break
+        case "undefined":
+            // Page buttons
+            switch (page) {
+                case Pages.VIRTUAL:
+                    commands += "<div>"
+                    commands += makeButton("Reset", `Are you sure you want to reset all virtual balances and delete all virtual PnL and balance history?`, `${root}reset=true`)
+                    commands += "</div>"
+                    break
+            }
             break
     }
 
     return commands
 }
 
-function MakeButton(name: string, question: string, action: string): string {
+function makeButton(name: string, question: string, action: string, target: string="_self"): string {
     let button = `<button onclick="(function(){`
-    button += `if(confirm('${question}')) window.location.href='${action}'`
+    if (question) button += `if(confirm('${question}')) `
+    button += `window.open('${action}', '${target}')`
     button += `})();">${name}</button>`
     return button
 }

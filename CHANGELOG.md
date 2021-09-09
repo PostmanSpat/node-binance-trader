@@ -1,8 +1,9 @@
-## [1.2.0] (2021-08-09)
+## [1.2.0] (2021-09-09)
 
 ### Bug Fixes
 
 * **trader:** rebalancing will not occur if rounding is more than 50%, or remaining quantity is too small.
+* **trader:** stopped repeating BNB free threshold message.
 
 ### Features
 
@@ -12,6 +13,9 @@
 * **trader:** added buffer for minimum trade cost.
 * **trader:** compare open trades to the source strategy.
 * **trader:** added notifier level configuration.
+* **trader:** added BNB top up feature and float, including buttons on PnL page.
+* **trader:** added Shut Down, Resume, and BVA buttons to Strategies page.
+* **trader:** added Reset buttons to Virtual Balances and PnL pages.
 
 ## [1.1.0] (2021-08-09)
 
@@ -22,7 +26,7 @@
 ### Features
 
 * **trader:** added option to manually close trades from the web diagnostics.
-* **trader:** added BNB Free Threshold check.
+* **trader:** added BNB free threshold check.
 * **trader:** added Stop, Resume, Close, and Delete buttons to Open Trades page.
 
 ## [1.0.1] (2021-08-03)

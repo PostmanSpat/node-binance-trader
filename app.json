@@ -100,6 +100,10 @@
         "description": "Creates a warning if your available BNB balance is below the threshold (too low for fees and interest)",
         "required": false
       },
+      "BNB_FREE_FLOAT": {
+        "description": "The BNB top up option will buy enough BNB to return your free balance to this level",
+        "required": false
+      },
       "TAKER_FEE_PERCENT": {
         "description": "The spot trading Taker Fee as quoted on Binance",
         "required": false
