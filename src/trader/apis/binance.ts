@@ -1,4 +1,4 @@
-import ccxt, { Dictionary } from "ccxt"
+import ccxt, { Dictionary, Market } from "ccxt"
 
 import env from "../env"
 import logger from "../../logger"
@@ -49,6 +49,22 @@ export async function loadMarkets(isReload?: boolean): Promise<ccxt.Dictionary<c
         })
         .catch((reason) => {
             logger.error(`Failed to get markets: ${reason}`)
+            return Promise.reject(reason)
+        })
+}
+
+// Get the current price information for a given market
+export async function fetchTicker(market: ccxt.Market) {
+    if (!binanceClient) return Promise.reject(logBinanceUndefined)
+
+    return binanceClient.fetchTicker(market.symbol)
+        .then((value) => {
+            logger.silly(`Loaded ticker: ${JSON.stringify(value)}`)
+            logger.debug(`Loaded ${value.symbol} ticker, buy price is ${value.bid}, sell price is ${value.ask}.`)
+            return value
+        })
+        .catch((reason) => {
+            logger.error(`Failed to get ticker: ${reason}`)
             return Promise.reject(reason)
         })
 }
