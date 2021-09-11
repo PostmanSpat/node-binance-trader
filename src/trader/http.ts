@@ -10,6 +10,7 @@ import BigNumber from "bignumber.js"
 import { loadRecords } from "./apis/postgres"
 import { Pages, Percent, URLs } from "./types/http"
 import { Strategy, TradeOpen, TradingType } from "./types/bva"
+import { toJSON } from './apis/json'
 
 export default function startWebserver(): http.Server {
     const webserver = express()
@@ -118,6 +119,8 @@ export default function startWebserver(): http.Server {
                 let page = req.query.db ? Number.parseInt(req.query.db.toString()) : 1
                 // Load the transactions from the database
                 res.send(formatHTMLTable(Pages.TRANS_DB, (await loadRecords("transaction", page)), page+1))
+            } else if (Object.keys(req.query).includes("raw")) {
+                res.json(toJSON(await loadRecords("transaction", 1)))
             } else {
                 // Use the memory transactions
                 res.send(formatHTMLTable(Pages.TRANS_MEMORY, tradingMetaData.transactions.slice().reverse(), ))
@@ -167,6 +170,9 @@ export default function startWebserver(): http.Server {
             }
         }
     })
+    // Allow static files from the http folders
+    webserver.use(express.static(__dirname + '/http'))
+    // Open the web server port
     return webserver.listen(env().TRADER_PORT, () =>
         logger.info(`Webserver started on port ${env().TRADER_PORT}.`)
     )

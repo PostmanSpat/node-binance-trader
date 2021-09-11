@@ -1,0 +1,10 @@
+#chart {
+    width: 100%;
+    min-height: 200px;
+    margin: 35px auto;
+}
+#chart.loading {
+    background-image: url('../img/loading.svg');
+    background-repeat: no-repeat;
+    background-position: center;
+}
