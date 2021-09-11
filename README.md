@@ -34,7 +34,7 @@ The new features that I have added to the trader include:
   * The default is margin.
 * ***CONFIG:* Wallet Buffer**
   * As slippage, spread, and bad trades are difficult to predict, it is good to keep some additional funds in your wallet to cover these costs. You can specify a buffer amount as a fraction of your wallet which will not be used for opening LONG trades.
-  * The default is 0.1 which is 10%.
+  * The default is 0.02 which is 2%.
 * ***CONFIG:* Maximum Count of Trades**
   * You can set maximum counts for SHORT and for LONG trades to limit how many can be active at one time. This can be used to limit your exposure to risk when borrowing, or to limit the number of times a LONG trade gets rebalanced. If a trade is stopped it will not count towards the limit.
   * The defaults are zero, which is unlimited.
