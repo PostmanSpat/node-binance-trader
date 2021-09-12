@@ -9,7 +9,7 @@ import { BalanceHistory, WalletType } from "./types/trader"
 import BigNumber from "bignumber.js"
 import { loadRecords } from "./apis/postgres"
 import { Pages, Percent, URLs } from "./types/http"
-import { Strategy, TradeOpen, TradingType } from "./types/bva"
+import { PublicStrategy, Strategy, TradeOpen, TradingType } from "./types/bva"
 
 export default function startWebserver(): http.Server {
     const webserver = express()
@@ -75,6 +75,8 @@ export default function startWebserver(): http.Server {
                 } else {
                     res.send(`No strategy was found with the ID of '${stratId}'.`)
                 }
+            } else if ("public" in req.query) {
+                res.send(formatHTMLTable(Pages.STRATEGIES, Object.values(tradingMetaData.publicStrategies)))
             } else {
                 res.send(formatHTMLTable(Pages.STRATEGIES, Object.values(tradingMetaData.strategies)))
             }
@@ -101,7 +103,7 @@ export default function startWebserver(): http.Server {
     // Allow user to see in memory or database log
     webserver.get("/log", async (req, res) => {
         if (authenticate(req, res)) {
-            if (Object.keys(req.query).includes("db")) {
+            if ("db" in req.query) {
                 let page = req.query.db ? Number.parseInt(req.query.db.toString()) : 1
                 // Load the log from the database
                 res.send(formatHTML(Pages.LOG_DB, (await loadRecords("log", page)).join("\r\n"), page+1))
@@ -114,7 +116,7 @@ export default function startWebserver(): http.Server {
     // Allow user to see in memory or database transactions
     webserver.get("/trans", async (req, res) => {
         if (authenticate(req, res)) {
-            if (Object.keys(req.query).includes("db")) {
+            if ("db" in req.query) {
                 let page = req.query.db ? Number.parseInt(req.query.db.toString()) : 1
                 // Load the transactions from the database
                 res.send(formatHTMLTable(Pages.TRANS_DB, (await loadRecords("transaction", page)), page+1))
@@ -174,7 +176,7 @@ export default function startWebserver(): http.Server {
 
 function authenticate(req: any, res: any): boolean {
     if (env().WEB_PASSWORD) {
-        if (Object.keys(req.query).includes(env().WEB_PASSWORD)) return true
+        if (env().WEB_PASSWORD in req.query) return true
 
         if (Object.values(req.query).includes(env().WEB_PASSWORD)) return true
         
@@ -190,17 +192,19 @@ function authenticate(req: any, res: any): boolean {
 function formatHTML(page: Pages, data: any, nextPage?: number): string {
     let html = `<html><head><title>NBT: ${page}</title></head><body>`
 
-    // Menu
-    html += `<p>`
-    html += Object.values(Pages).map(name => {
-        let link = ""
-        if (page != name) link += `<a href="${URLs[name].replace("%d", "1")}${env().WEB_PASSWORD}">`
-        link += name
-        if (page != name) link += `</a>`
-        return link
-    }).join(" | ")
-    html += `<br><font size=-2>${new Date().toLocaleString()}</font>`
-    html += `</p>`
+    if (page) {
+        // Menu
+        html += `<p>`
+        html += Object.values(Pages).map(name => {
+            let link = ""
+            if (page != name) link += `<a href="${URLs[name].replace("%d", "1")}${env().WEB_PASSWORD}">`
+            link += name
+            if (page != name) link += `</a>`
+            return link
+        }).join(" | ")
+        html += `<br><font size=-2>${new Date().toLocaleString()}</font>`
+        html += `</p>`
+    }
 
     // Commands
     html += makeCommands(page, undefined)
@@ -210,7 +214,7 @@ function formatHTML(page: Pages, data: any, nextPage?: number): string {
         html += `<pre><code>${typeof data == "string" ? data : JSON.stringify(data, null, 4)}</code></pre>`
 
         // Pagination
-        if (nextPage) {
+        if (page && nextPage) {
             html += `<a href="${URLs[page].replace("%d", nextPage.toString())}${env().WEB_PASSWORD}">Next Page...</a>`
         }
     } else {
@@ -288,7 +292,7 @@ function formatHTMLTable(page: Pages, data: any, nextPage?: number, breadcrumb?:
                         if (typeof(row[col]) == "boolean" && row[col]) result += " style='color: blue;'"
 
                         // Colour string as a gradient based on unique values (too many colours get meaningless)
-                        if (typeof(row[col]) == "string" && row[col] && col in values) result += ` style='color: ${makeColor(values[col].indexOf(row[col]), values[col].length)};'`
+                        if (typeof(row[col]) == "string" && row[col] && col in values) result += ` style='${makeColor(values[col].indexOf(row[col]), values[col].length)};'`
 
                         result += ">"
                         if (row[col] != undefined) result += row[col]
@@ -337,15 +341,15 @@ function percentageChange(period: string, history: BalanceHistory[]): {} {
 }
 
 function makeColor(n: number, total: number): string {
-    if (total <= 1) return "black"
+    if (total <= 1) return ""
 
     // Offset to start with blue, darken a bit for readability
-    return `hsl(${(225 + (n * (360 / total))) % 360}, 100%, 40%)`
+    return `color: hsl(${(225 + (n * (360 / total))) % 360}, 100%, 40%)`
 }
 
 function makeCommands(page: Pages, record: any) : string {
     let commands = ""
-    let root = URLs[page]
+    let root = page ? URLs[page] : ""
     if (env().WEB_PASSWORD) root += env().WEB_PASSWORD + "&"
     switch (typeof record) {
         case "object":
@@ -364,11 +368,15 @@ function makeCommands(page: Pages, record: any) : string {
                     commands += makeButton("Delete", `Are you sure you want to delete trade ${tradeOpen.id}?`, `${root}delete=${tradeOpen.id}`)
                     break
                 case Pages.STRATEGIES:
-                    const strategy = record as Strategy
-                    if (!strategy.isStopped) {
-                        commands += makeButton("Shut Down", `Are you sure you want to shut down strategy ${strategy.id}? Existing open trades will only close for profit.`, `${root}stop=${strategy.id}`)
+                    let strategy: Strategy | PublicStrategy = record as Strategy
+                    if ('isActive' in record) {
+                        if (!strategy.isStopped) {
+                            commands += makeButton("Shut Down", `Are you sure you want to shut down strategy ${strategy.id}? Existing open trades will only close for profit.`, `${root}stop=${strategy.id}`)
+                        } else {
+                            commands += makeButton("Resume", `Are you sure you want to resume strategy ${strategy.id}? Loss Trade Run will not reset until there is a winning trade, or you remove and add the strategy from the NBT Hub.`, `${root}start=${strategy.id}`)
+                        }
                     } else {
-                        commands += makeButton("Resume", `Are you sure you want to resume strategy ${strategy.id}? Loss Trade Run will not reset until there is a winning trade, or you remove and add the strategy from the NBT Hub.`, `${root}start=${strategy.id}`)
+                        strategy = record as PublicStrategy
                     }
                     commands += " "
                     commands += makeButton("BVA", "", `https://bitcoinvsalts.com/strat/${strategy.id}`, "_blank")

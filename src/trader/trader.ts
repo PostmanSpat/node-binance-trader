@@ -25,6 +25,7 @@ import { LoanTransaction } from "./types/binance"
 import {
     EntryType,
     PositionType,
+    PublicStrategy,
     Signal,
     SignalJson,
     Strategy,
@@ -34,8 +35,6 @@ import {
 } from "./types/bva"
 import { MessageType } from "./types/notifier"
 import { WalletType, TradingData, TradingMetaData, TradingSequence, LongFundsType, WalletData, ActionType, SourceType, Transaction, BalanceHistory } from "./types/trader"
-import { resolve } from "path/posix"
-import { promise } from "ora"
 
 // Standard error messages
 const logDefaultEntryType = "It shouldn't be possible to have an entry type other than enter or exit."
@@ -53,7 +52,8 @@ export const tradingMetaData: TradingMetaData = {
     markets: {}, // This is a dictionary of the different trading symbols and limits that are supported on the Binance exchange
     virtualBalances: {}, // The virtual wallets used to keep track of the balance for simulations
     transactions: [], // Array to keep a transaction history
-    balanceHistory: {} // Keeps the open and close balances over time for each quote coin, indexed by trading type then coin
+    balanceHistory: {}, // Keeps the open and close balances over time for each quote coin, indexed by trading type then coin
+    publicStrategies: {}, // Keeps track of all strategies sending public signals
 }
 
 // Used for initialising and resetting the virtual balances
@@ -771,6 +771,16 @@ function logSignal(signal: Signal, type: "buy" | "sell" | "close" | "stop") {
         default:
             message += signal.entryType == EntryType.ENTER ? "n opening" : " closing"
             message += ` ${type} (${signal.entryType} ${signal.positionType}) signal`
+
+            // Keep a record of all strategies broadcasting public signals
+            const pStrat = new PublicStrategy(signal)
+            if (tradingMetaData.publicStrategies[pStrat.id]) {
+                // Copy previous stats
+                pStrat.shortOpened += tradingMetaData.publicStrategies[pStrat.id].shortOpened
+                pStrat.longOpened += tradingMetaData.publicStrategies[pStrat.id].longOpened
+                pStrat.closed += tradingMetaData.publicStrategies[pStrat.id].closed
+            }
+            tradingMetaData.publicStrategies[pStrat.id] = pStrat
     }
     message += ` for ${getLogName(signal)}.`
     const strategy = tradingMetaData.strategies[signal.strategyId]
@@ -2668,7 +2678,8 @@ async function startUp() {
         // Markets will come from Binance
         // If the process restarts we'll lose the queue, so no need to reload tradesClosing
         // Transactions can be huge, so we save them differently
-        const excluded = [ "markets", "tradesClosing", "transactions" ]
+        // We don't need to keep the public strategies, it is just for info
+        const excluded = [ "markets", "tradesClosing", "transactions", "publicStrategies" ]
 
         for (const type of Object.keys(tradingMetaData)) {
             if (!excluded.includes(type)) {
