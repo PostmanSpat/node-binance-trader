@@ -5,11 +5,11 @@ import logger, { loggerOutput } from "../logger"
 import env from "./env"
 import { closeTrade, deleteBalanceHistory, deleteTrade, resetVirtualBalances, setStrategyStopped, setTradeStopped, setVirtualWalletFunds, topUpBNBFloat, tradingMetaData} from "./trader"
 import { Dictionary } from "ccxt"
-import { BalanceHistory, WalletType } from "./types/trader"
+import { ActionType, BalanceHistory, SourceType, Transaction, WalletType } from "./types/trader"
 import BigNumber from "bignumber.js"
 import { loadRecords } from "./apis/postgres"
-import { Pages, Percent, URLs } from "./types/http"
-import { Strategy, TradeOpen, TradingType } from "./types/bva"
+import { Pages, Percent, TransactionSummary, URLs } from "./types/http"
+import { PositionType, Strategy, TradeOpen, TradingType } from "./types/bva"
 import { toJSON } from './apis/json'
 
 export default function startWebserver(): http.Server {
@@ -119,8 +119,9 @@ export default function startWebserver(): http.Server {
                 let page = req.query.db ? Number.parseInt(req.query.db.toString()) : 1
                 // Load the transactions from the database
                 res.send(formatHTMLTable(Pages.TRANS_DB, (await loadRecords("transaction", page)), page+1))
-            } else if (Object.keys(req.query).includes("raw")) {
-                res.json(toJSON(await loadRecords("transaction", 1)))
+            } else if (req.query.summary) {
+                const parts = req.query.summary.toString().split(":")
+                res.json(await summariseTransactions(parts[0].toUpperCase(), parts[1] as TradingType))
             } else {
                 // Use the memory transactions
                 res.send(formatHTMLTable(Pages.TRANS_MEMORY, tradingMetaData.transactions.slice().reverse(), ))
@@ -386,8 +387,11 @@ function makeCommands(page: Pages, record: any) : string {
             switch (page) {
                 case Pages.PNL:
                 const crumb = record.split(" : ")
-                if (crumb[0] == "Balance History") {
-                    commands += "<div>"
+                commands += "<div>"
+                if (crumb[0] == "Profit and Loss") {
+                    const graph = "graph.html" + root.substr(URLs[page].length-1)
+                    commands += makeButton("Graph", "", `${graph}summary=${crumb[2]}:${crumb[1]}`, "_blank")
+                } else if (crumb[0] == "Balance History") {
                     commands += makeButton("Reset", `Are you sure you want to delete the ${crumb[1]} PnL and balance history for ${crumb[2]}?`, `${root}reset=${crumb[2]}:${crumb[1]}`)
                     if (env().BNB_FREE_FLOAT > 0 && crumb[1] as TradingType == TradingType.real && crumb[2] != "BNB") {
                         for (let wallet of Object.values(WalletType)) {
@@ -396,8 +400,8 @@ function makeCommands(page: Pages, record: any) : string {
                             commands += makeButton(`Top Up ${wallet} BNB`, `Are you sure you want to sell some ${crumb[2]} to buy BNB to top up the float on ${wallet}? Your float level is set to ${env().BNB_FREE_FLOAT} BNB.`, `${root}topup=${crumb[2]}:${wallet}`)
                         }
                     }
-                    commands += "</div>"
                 }
+                commands += "</div>"
                 break
             }
             break
@@ -422,4 +426,85 @@ function makeButton(name: string, question: string, action: string, target: stri
     button += `window.open('${action}', '${target}')`
     button += `})();">${name}</button>`
     return button
+}
+
+// Load the previous transactions and extract a set period, then summarise PnL, trade counts, and trade volumes to hourly intervals 
+async function summariseTransactions(quote: String, tradingType: TradingType): Promise<Dictionary<Dictionary<Dictionary<TransactionSummary>>>> {
+    const results: Dictionary<Dictionary<Dictionary<TransactionSummary>>> = {}
+    let done = false
+    let page = 1
+    let now = new Date()
+    // Calculate the window for the maximum number of days to display, today counts as one
+    let window = new Date(now.getFullYear(), now.getMonth(), now.getDate()-(env().MAX_WEB_GRAPH_DAYS-1))
+
+    while (!done) {
+        // Because we don't save the transaction as fields in the database, we can't query directly, so have to load a block and process it
+        // Potentially this can miss a transaction if a new one comes in as it is switching pages, but hopefully it is rare in practice
+        const transactions = await loadRecords("transaction", page) as Transaction[]
+        page++
+        if (!transactions.length) {
+            // If there are no pages left, then finish
+            done = true
+            break
+        }
+
+        // Process all the transactions in the page
+        for (const trans of transactions) {
+            if (trans.timestamp >= window) {
+                // Not going to summarise lending transactions
+                if (trans.action == ActionType.BUY || trans.action == ActionType.SELL) {
+                    // Check the parameters match the request, symbolAsset should always be a symbol for buy / sell transactions
+                    if (trans.tradingType == tradingType && trans.symbolAsset.split("/")[1] == quote) {
+                        // Clear the minutes, seconds, and milliseconds so that transactions are grouped by hours
+                        trans.timestamp.setHours(trans.timestamp.getHours(), 0, 0, 0)
+
+                        // Set up results object
+                        if (!(trans.strategyName in results)) {
+                            results[trans.strategyName] = {}
+                        }
+                        if (!(trans.positionType in results[trans.strategyName])) {
+                            results[trans.strategyName][trans.positionType] = {}
+                        }
+                        if (!(trans.timestamp.getTime() in results[trans.strategyName][trans.positionType])) {
+                            results[trans.strategyName][trans.positionType][trans.timestamp.getTime()] = new TransactionSummary()
+                        }
+                        
+                        // Extract statistics for the summary
+                        const summary = results[trans.strategyName][trans.positionType][trans.timestamp.getTime()]
+                        switch (trans.positionType) {
+                            case PositionType.SHORT:
+                                if (trans.action == ActionType.SELL) {
+                                    summary.opened++
+                                } else {
+                                    summary.closed++
+                                }
+                                break
+                            case PositionType.LONG:
+                                if (trans.action == ActionType.BUY) {
+                                    summary.opened++
+                                } else if (trans.source != SourceType.REBALANCE) {
+                                    // Autobalancing is only selling part of the trade, so doesn't count as a close
+                                    summary.closed++
+                                }
+                                break
+                        }
+                        // All buy / sell transactions should have a value anyway
+                        if (trans.value) {
+                            summary[trans.action] += trans.value.toNumber()
+                        }
+                        // All buy / sell transactions should have a profitLoss value anyway
+                        if (trans.profitLoss) {
+                            summary.profitLoss += trans.profitLoss.toNumber()
+                        }
+                    }
+                }
+            } else {
+                // Transactions should be sorted by timestamp, so stop once we find one that is too old
+                done = true
+                break
+            }
+        }
+    }
+
+    return Promise.resolve(results)
 }

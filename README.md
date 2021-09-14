@@ -79,7 +79,7 @@ The new features that I have added to the trader include:
     * **/log** - Internal log currently held in memory (newest entries at the top).
     * **/log?db=1** - Internal log loaded from the database (newest entries at the top).
     * **/pnl** - Calculated rate of return and history of open and close balances (best estimation based on available data).
-    * **/pnl?reset=** - Specify a coin and trading type to clear the Balance History and PnL for that coin and type (e.g. ?reset=BTC:virtual).
+    * **/pnl?reset=** - Specify a coin and trading type to clear the Balance History and PnL for that coin and type (e.g. ?reset=BTC:real).
     * **/pnl?topup=** - Specify a coin and wallet to buy BNB to top up the float (e.g. ?topup=BTC:spot).
     * **/strategies** - Configured strategies.
     * **/strategies?stop=** - Specify a strategy ID to shut down trading, this will still allow open trades to close automatically but only when the signal price is a profit.
@@ -93,6 +93,7 @@ The new features that I have added to the trader include:
     * **/trans?db=1** - Log of actual buy, sell, borrow, repay transactions loaded from the database (newest entries at the top).
     * **/virtual** - Views the current virtual balances.
     * **/virtual?reset=true** - Clears and reloads the virtual balances and virtual PnL. You can also pass a number on the reset and it will change the default value for **Virtual Wallet Funds** (e.g. ?reset=100).
+    * **/graph.html?summary=** - Specify coin and trading type to graph the last 7 days worth of transactions (e.g. ?summary=BTC:real).
   * You can also configure a **Web Password** in the environment variables to restrict access to these commands (e.g. http://localhost:8003/log?mypassword).
 * **Individual Tracking of Real / Virtual Trades**
   * In the original trader if you started a strategy in virtual trading and switched to real trading, or vice versa, it would attempt to close trades based on the current status of the strategy, rather than how the trade was originally opened. This means it could try to close a trade on Binance that was originally opened virtually, or never close the open trade on Binance because you've now switched the strategy to virtual. Now, if the trade opened on Binance it will close on Binance even if the strategy has been switched to virtual. If you don't want this to happen, make sure you close or stop the open trades before switching modes.
