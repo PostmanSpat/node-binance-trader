@@ -117,11 +117,6 @@ function render(data) {
                     initialAnimation: {
                         enabled: true
                     }
-                },
-                toolbar: {
-                    tools: {
-                        download: false // Don't want to be able to download as CSV or image
-                    }
                 }
             },
             dataLabels: {
