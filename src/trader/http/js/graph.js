@@ -117,6 +117,15 @@ function render(data) {
                     initialAnimation: {
                         enabled: true
                     }
+                },
+                toolbar: {
+                    export: {
+                        csv: {
+                            dateFormatter: function(timestamp) {
+                                return new Date(timestamp).toISOString()
+                            }
+                        }
+                    }
                 }
             },
             dataLabels: {
@@ -136,7 +145,10 @@ function render(data) {
                     '#33B2DF', '#4CAF50', '#3F51B5', '#F9CE1D', '#F9A3A4', '#8D5B4C',
                     '#81D4FA', '#90EE7E', '#A300D6', '#C5D86D', '#D4526E'],
             xaxis: {
-                type: 'datetime'
+                type: 'datetime',
+                labels: {
+                    datetimeUTC: false
+                }
             },
             yaxis: {
                 forceNiceScale: true, // This actually doesn't work for ranges less than 2 (e.g. BTC quantities)
