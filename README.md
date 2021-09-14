@@ -84,6 +84,7 @@ The new features that I have added to the trader include:
     * **/strategies** - Configured strategies.
     * **/strategies?stop=** - Specify a strategy ID to shut down trading, this will still allow open trades to close automatically but only when the signal price is a profit.
     * **/strategies?start=** - Specify a strategy ID to resume normal trading.
+    * **/strategies?public** - List of all strategies broadcasting public signals since the trader started.
     * **/trades** - Current open trades list.
     * **/trades?stop=** - Specify a trade ID to stop trading, this will keep the trade open but ignore close signals from the NBT Hub.
     * **/trades?start=** - Specify a trade ID to resume trading, this will accept the next close signal from the NBT Hub.

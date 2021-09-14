@@ -1,7 +1,7 @@
 import BigNumber from "bignumber.js"
 import env from "../env"
 import { Dictionary, Market } from "ccxt"
-import { PositionType, Signal, Strategy, TradeOpen, TradingType } from "./bva"
+import { PositionType, PublicStrategy, Signal, Strategy, TradeOpen, TradingType } from "./bva"
 
 // Represents the different wallet types in Binance
 export enum WalletType {
@@ -47,6 +47,7 @@ export interface TradingMetaData {
     virtualBalances: Dictionary<Dictionary<BigNumber>>
     transactions: Transaction[],
     balanceHistory: Dictionary<Dictionary<BalanceHistory[]>>
+    publicStrategies: Dictionary<PublicStrategy>
 }
 
 export interface TradingSequence {

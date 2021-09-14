@@ -70,6 +70,35 @@ export interface StrategyJson {
     trading_type: string
 }
 
+// Derived from public signals
+export class PublicStrategy {
+    id: string // ID of the strategy
+    name: string // Name of the strategy
+    userId: string // Strategy owner's user ID
+    nickname: string // Strategy owner's username
+    lastSignal: Date // Time that the signal was received
+    shortOpened: number // Count of short trades opened
+    longOpened: number // Count of long trades opened
+    closed: number // Count of closing signals
+
+    constructor(signal: Signal) {
+        this.id = signal.strategyId
+        this.name = signal.strategyName
+        this.userId = signal.userId
+        this.nickname = signal.nickname
+        this.lastSignal = signal.timestamp
+        this.shortOpened = 0
+        this.longOpened = 0
+        this.closed = 0
+        if (signal.entryType == EntryType.ENTER) {
+            if (signal.positionType == PositionType.SHORT) this.shortOpened++
+            if (signal.positionType == PositionType.LONG) this.longOpened++
+        } else {
+            this.closed++
+        }
+    }
+}
+
 /////
 
 export interface TradeOpenJson {

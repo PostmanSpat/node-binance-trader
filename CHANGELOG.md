@@ -17,6 +17,7 @@
 * **trader:** added Shut Down, Resume, and BVA buttons to Strategies page.
 * **trader:** added Reset buttons to Virtual Balances and PnL pages.
 * **trader:** decreased wallet buffer to 2%.
+* **trader:** tracking public strategies.
 * **trader:** added transaction summary graphs in the web UI.
 
 ## [1.1.0] (2021-08-09)
