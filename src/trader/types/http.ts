@@ -35,3 +35,12 @@ export class Percent {
         return this.value.toFixed(this.precision) + "%"
     }
 }
+
+// Represents the statistics for a single time step and transaction type
+export class TransactionSummary {
+    opened: number = 0 // Number of trades opened
+    closed: number = 0 // Number of trades closed
+    buy: number = 0 // Quantity of asset used to buy
+    sell: number = 0 // Quantity of asset used to sell
+    profitLoss: number = 0 // Total profit or loss
+}

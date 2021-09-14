@@ -66,6 +66,7 @@ export function getDefault(): Readonly<any> {
         MAX_DATABASE_ROWS: num({ default: 10000, desc: "Maximum number of records that can be written to the database" }),
         MAX_WEB_COLOURS: num({ default: 10, desc: "Maximum number unique colours used to differentiate string data in the web UI" }),
         MAX_WEB_PRECISION: num({ default: 8, desc: "Maximum number decimal places to display for Big Numbers in the web UI and notification messages" }),
+        MAX_WEB_GRAPH_DAYS: num({ default: 7, desc: "Maximum number days to display on the transaction summary graphs in the web UI" }),
         REFERENCE_SYMBOL: str({ default: "BNBBTC", desc: "Uses this market data to calculate wallet funds for other coins" }),
         BALANCE_SYNC_DELAY: num({ default: 1500, desc: "Number of milliseconds to wait after making a trade before fetching current balances" }),
     })
