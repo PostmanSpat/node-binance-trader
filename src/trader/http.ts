@@ -10,7 +10,6 @@ import BigNumber from "bignumber.js"
 import { loadRecords } from "./apis/postgres"
 import { Pages, Percent, TransactionSummary, URLs } from "./types/http"
 import { PositionType, Strategy, TradeOpen, TradingType } from "./types/bva"
-import { toJSON } from './apis/json'
 
 export default function startWebserver(): http.Server {
     const webserver = express()
