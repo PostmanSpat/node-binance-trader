@@ -1,14 +1,14 @@
 import BigNumber from "bignumber.js"
 
 export enum Pages {
-    TRADES = "Open Trades",
+    TRADES = "Open<br />Trades",
     STRATEGIES = "Strategies",
-    VIRTUAL = "Virtual Balances",
-    LOG_MEMORY = "Log (Since Restart)",
-    LOG_DB = "Log (History)",
-    TRANS_MEMORY = "Transactions (Since Restart)",
-    TRANS_DB = "Transactions (History)",
-    PNL = "Profit n Loss / Balance History"
+    VIRTUAL = "Virtual<br />Balances",
+    LOG_MEMORY = "Log<br />(Since Restart)",
+    LOG_DB = "Log<br />(History)",
+    TRANS_MEMORY = "Transactions<br />(Since Restart)",
+    TRANS_DB = "Transactions<br />(History)",
+    PNL = "Profit n Loss /<br />Balance History"
 }
 
 export const URLs = {

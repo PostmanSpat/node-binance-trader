@@ -1,0 +1,78 @@
+body {
+    background-color: rgba(17,24,39,1);
+    color: rgba(209,213,219,1);
+}
+pre {
+    display: table;
+    white-space: pre-wrap
+}
+
+.section, table {
+    border-color: rgba(30,58,138,1);
+    border-radius: .5rem;
+    border-style: solid;
+}
+.section {
+    margin-bottom: 0.8rem;
+    padding: 0.4rem;
+    border-width: 2px;
+}
+
+table {
+    border-width: 1px;
+    overflow: hidden;
+}
+tr {
+    border-color: #e5e7eb;
+    border-style: solid;
+}
+tbody tr:hover {
+    background-color: rgba(22,37,78,1);
+}
+td, th {
+    border-style: solid;
+    border-width: 1px 1px 0px 0px;
+    border-right-color: #e5e7eb33;
+}
+td:last-child, th:last-child {
+    border-right-width: 0px;
+}
+th {
+    border-top-width: 0px;
+    color: rgba(107,114,128,1)
+}
+
+button {
+    background-color: transparent;
+    border-color: rgba(37,99,235,1);
+    border-radius: .3rem;
+    border-width: 1px;
+    border-style: solid;
+    cursor: pointer;
+    color: rgba(96,165,250,1);
+}
+button:hover {
+    background-color: rgba(37,99,235,1);
+    color: rgba(191,211,249,1);
+}
+#menu button, #pages button {
+    border-width: 2px;
+    border-radius: .5rem;
+    vertical-align: top;
+    padding: .5rem .75rem;
+    margin: 1px 0px;
+}
+#menu button {
+    height: 50px;
+}
+button.disabled {
+    background-color: transparent;
+    border-color: rgba(31,41,55,1);
+    cursor: auto;
+    color: rgba(156,163,175,1);
+}
+
+#timestamp {
+    color: rgba(156,163,175,1);
+    font-size: x-small;
+}

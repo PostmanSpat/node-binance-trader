@@ -113,11 +113,6 @@ function render(data) {
                 width: "100%",
                 type: "area",
                 stacked: chart != "pnl", // Stacked pnl is too hard to understand
-                animations: {
-                    initialAnimation: {
-                        enabled: true
-                    }
-                },
                 toolbar: {
                     export: {
                         csv: {
@@ -126,7 +121,8 @@ function render(data) {
                             }
                         }
                     }
-                }
+                },
+                background: 'rgba(17,24,39,1)',
             },
             dataLabels: {
                 enabled: false // Don't need individual numbers displayed on each step of each series
@@ -144,6 +140,9 @@ function render(data) {
             colors: ['#008FFB', '#00E396', '#775DD0', '#FEB019', '#FF4560', '#5A2A27',
                     '#33B2DF', '#4CAF50', '#3F51B5', '#F9CE1D', '#F9A3A4', '#8D5B4C',
                     '#81D4FA', '#90EE7E', '#A300D6', '#C5D86D', '#D4526E'],
+            theme: {
+                mode: 'dark'
+            },
             xaxis: {
                 type: 'datetime',
                 labels: {

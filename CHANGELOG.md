@@ -19,6 +19,7 @@
 * **trader:** decreased wallet buffer to 2%.
 * **trader:** tracking public strategies.
 * **trader:** added transaction summary graphs in the web UI.
+* **trader:** web UI facelift.
 
 ## [1.1.0] (2021-08-09)
 

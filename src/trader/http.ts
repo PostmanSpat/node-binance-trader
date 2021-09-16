@@ -106,7 +106,7 @@ export default function startWebserver(): http.Server {
             if ("db" in req.query) {
                 let page = req.query.db ? Number.parseInt(req.query.db.toString()) : 1
                 // Load the log from the database
-                res.send(formatHTML(Pages.LOG_DB, (await loadRecords("log", page)).join("\r\n"), page+1))
+                res.send(formatHTML(Pages.LOG_DB, (await loadRecords("log", page)).join("\r\n"), page))
             } else {
                 // Use the memory log, exclude blank lines (i.e. the latest one)
                 res.send(formatHTML(Pages.LOG_MEMORY, loggerOutput.filter(line => line).reverse().join("\r\n")))
@@ -119,13 +119,13 @@ export default function startWebserver(): http.Server {
             if ("db" in req.query) {
                 let page = req.query.db ? Number.parseInt(req.query.db.toString()) : 1
                 // Load the transactions from the database
-                res.send(formatHTMLTable(Pages.TRANS_DB, (await loadRecords("transaction", page)), page+1))
+                res.send(formatHTMLTable(Pages.TRANS_DB, (await loadRecords("transaction", page)), page))
             } else if (req.query.summary) {
                 const parts = req.query.summary.toString().split(":")
                 res.json(await summariseTransactions(parts[0].toUpperCase(), parts[1] as TradingType))
             } else {
                 // Use the memory transactions
-                res.send(formatHTMLTable(Pages.TRANS_MEMORY, tradingMetaData.transactions.slice().reverse(), ))
+                res.send(formatHTMLTable(Pages.TRANS_MEMORY, tradingMetaData.transactions.slice().reverse()))
             }
         }
     })
@@ -195,20 +195,26 @@ function authenticate(req: any, res: any): boolean {
     return true
 }
 
-function formatHTML(page: Pages, data: any, nextPage?: number): string {
-    let html = `<html><head><title>NBT: ${page}</title></head><body>`
+function formatHTML(page: Pages, data: any, current?: number): string {
+    let html = `<html><head><title>NBT: ${page.replace("<br />", " ")}</title>`
+    html += `<link rel="icon" href="/img/favicon.svg" type="image/svg+xml">`
+    html += `<link rel="stylesheet" href="css/main.css">`
+    html += `</head><body>`
 
     if (page) {
         // Menu
-        html += `<p>`
+        html += `<p id="menu">`
         html += Object.values(Pages).map(name => {
-            let link = ""
-            if (page != name) link += `<a href="${URLs[name].replace("%d", "1")}${env().WEB_PASSWORD}">`
-            link += name
-            if (page != name) link += `</a>`
+            let link = `<button `
+            if (page != name) {
+                link += `onclick="location.href='${URLs[name].replace("%d", "1")}${env().WEB_PASSWORD}';"`
+            } else {
+                link += `class="disabled"`
+            }
+            link += `>${name}</button>`
             return link
-        }).join(" | ")
-        html += `<br><font size=-2>${new Date().toLocaleString()}</font>`
+        }).join(" ")
+        html += `<br><label id="timestamp">${new Date().toLocaleString()}</label>`
         html += `</p>`
     }
 
@@ -220,17 +226,38 @@ function formatHTML(page: Pages, data: any, nextPage?: number): string {
         html += `<pre><code>${typeof data == "string" ? data : JSON.stringify(data, null, 4)}</code></pre>`
 
         // Pagination
-        if (page && nextPage) {
-            html += `<a href="${URLs[page].replace("%d", nextPage.toString())}${env().WEB_PASSWORD}">Next Page...</a>`
+        if (page && current) {
+            html += `<div id="pages">`
+            html += pageButton(page, current, false, false) + " "
+            html += pageButton(page, current, true, false)
+            html += `</div>`
         }
     } else {
         html += "No data yet."
+        if (current) {
+            html += `<div id="pages">`
+            html += pageButton(page, current, false, false) + " "
+            html += pageButton(page, current, true, true)
+            html += `</div>`
+        }
     }
     
     return html + `</body></html>`
 }
 
-function formatHTMLTable(page: Pages, data: any, nextPage?: number, breadcrumb?: string): string {
+function pageButton(page: Pages, current: number, next: boolean, disabled: boolean): string {
+    let button = `<button `
+    const num = next ? current+1 : current-1
+    if (disabled || num <= 0) {
+        button += `class="disabled"`
+    } else {
+        button += `onclick="location.href='${URLs[page].replace("%d", num.toString())}${env().WEB_PASSWORD}';"`
+    }
+    button += ">" + (next ? ">" : "<") + "</button>"
+    return button
+}
+
+function formatHTMLTable(page: Pages, data: any, current?: number, breadcrumb?: string): string {
     let result = ""
 
     // Just in case
@@ -239,7 +266,7 @@ function formatHTMLTable(page: Pages, data: any, nextPage?: number, breadcrumb?:
     if (!Array.isArray(data)) {
         if (!breadcrumb) breadcrumb = ""
         for (let section of Object.keys(data)) {
-            result += formatHTMLTable(page, data[section], nextPage, breadcrumb + section + " : ")
+            result += formatHTMLTable(page, data[section], current, breadcrumb + section + " : ")
         }
     } else {
         if (data.length) {
@@ -267,14 +294,14 @@ function formatHTMLTable(page: Pages, data: any, nextPage?: number, breadcrumb?:
             })
 
             // Add breadcrumb header with any buttons
-            if (breadcrumb) result += `<h2>${breadcrumb}${makeCommands(page, breadcrumb)}</h2>`
+            if (breadcrumb) result += `<div class="section"><h2>${breadcrumb}${makeCommands(page, breadcrumb)}</h2>`
 
             // Add table headers before first row
-            result += "<table border=1 cellspacing=0><tr>"
+            result += "<table border=1 cellspacing=0><thead><tr>"
             for (let col of cols) {
-                result += "<th>" + col + "</th>"
+                result += "<th>" + makeTitleCase(col) + "</th>"
             }
-            result += "<th></th></tr>"
+            result += "<th></th></tr></thead><tbody>"
 
             // Add row data
             for (let row of data) {
@@ -308,14 +335,13 @@ function formatHTMLTable(page: Pages, data: any, nextPage?: number, breadcrumb?:
                 result += "<td>" + makeCommands(page, row) + "</td>"
                 result += "</tr>"
             }
-            if (result != "") {
-                result += "</table>"
-            }
+            result += "</tbody></table>"
+            if (breadcrumb) result += "</div>"
         }
     }
     if (!breadcrumb) {
         // This is top level, so wrap in HTML page
-        return formatHTML(page, result, nextPage)
+        return formatHTML(page, result, current)
     } else {
         return result
     }
@@ -351,6 +377,10 @@ function makeColor(n: number, total: number): string {
 
     // Offset to start with blue, darken a bit for readability
     return `color: hsl(${(225 + (n * (360 / total))) % 360}, 100%, 40%)`
+}
+
+function makeTitleCase(value: string): string {
+    return value.replace(/([a-z0-9])([A-Z])/g, '$1 $2').split(' ').map(word => word.toLowerCase() == "id" ? "ID" : word.charAt(0).toUpperCase() + word.substring(1)).join(' ')
 }
 
 function makeCommands(page: Pages, record: any) : string {
