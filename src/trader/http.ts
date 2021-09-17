@@ -445,6 +445,11 @@ function makeCommands(page: Pages, record: any) : string {
         case "undefined":
             // Page buttons
             switch (page) {
+                case Pages.STRATEGIES:
+                    commands += "<div>"
+                    commands += makeButton("BVA", "", `https://bitcoinvsaltcoins.com/profile`, "_blank")
+                    commands += "</div>"
+                    break
                 case Pages.VIRTUAL:
                     commands += "<div>"
                     commands += makeButton("Reset", `Are you sure you want to reset all virtual balances and delete all virtual PnL and balance history?`, `${root}reset=true`)
