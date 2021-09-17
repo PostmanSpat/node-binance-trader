@@ -2064,8 +2064,8 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
 
                                 // Just to be sure, let's check the free balance again, this will probably always happen due to rounding
                                 if (use.free.isLessThan(cost)) {
-                                    // To limit spamming the logs, we'll only warn if there was more than 2% change
-                                    if (use.free.multipliedBy(1.02).isLessThan(cost)) {
+                                    // To limit spamming the logs, we'll only warn if there was more than 5% change
+                                    if (use.free.multipliedBy(1.05).isLessThan(cost)) {
                                         logger.warn(`Rebalancing calculated a lower trade of only ${use.free.toFixed()} ${tradingData.market.quote} instead of ${cost.toFixed()} ${tradingData.market.quote}.`)
                                     }
                                     cost = use.free

@@ -1,15 +1,16 @@
-## [1.2.0] (2021-09-09)
+## [1.2.0] (2021-09-17)
 
 ### Bug Fixes
 
 * **trader:** rebalancing will not occur if rounding is more than 50%, or remaining quantity is too small.
 * **trader:** stopped repeating BNB free threshold message.
-* **trader:** do not generate silly messages if not needed.
+* **trader:** limited decimal places for numbers in the web UI.
+* **trader:** does not generate silly messages if not needed.
+* **trader:** changed rebalancing warning to 5% to reduce log spam.
 
 ### Features
 
 * **trader:** added estimation of taker fees for better PnL calculation.
-* **trader:** limited decimal places for numbers in the web UI.
 * **trader:** added upgrade path for saved data.
 * **trader:** added buffer for minimum trade cost.
 * **trader:** compare open trades to the source strategy.
