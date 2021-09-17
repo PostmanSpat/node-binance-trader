@@ -1192,7 +1192,9 @@ async function executeTradeAction(
             logger.silly("executeTradeAction->fetchTicker: " + reason)
             return Promise.reject(reason)
         })
-        const price = action == ActionType.BUY ? ticker.bid : ticker.ask
+        let price = action == ActionType.BUY ? ticker.bid : ticker.ask
+        // Unlikely, but price might be 0 if there are no orders
+        if (!price) price = (action == ActionType.BUY ? tradeOpen.priceBuy! : tradeOpen.priceSell!).toNumber()
 
         result = {
             status: "closed",
