@@ -14,7 +14,7 @@ export async function getTradeOpenList(): Promise<TradeOpen[]> {
                 }`
             )
             .then((response) => {
-                logger.silly(`Fetched trades: ${JSON.stringify(response.data)}`)
+                if (logger.isSillyEnabled()) logger.silly(`Fetched trades: ${JSON.stringify(response.data)}`)
                 const bvaCommand: BvaCommand = response.data
                 const tradeOpens = bvaCommand.rows.map(
                     (tradeOpenJson) => new TradeOpen(tradeOpenJson)
@@ -46,7 +46,7 @@ export async function getStratTradeOpenList(stratid: string): Promise<TradeOpen[
                 `https://api-bva.herokuapp.com/api/opensignals?id=${stratid}`
             )
             .then((response) => {
-                logger.silly(`Fetched strategy trades: ${JSON.stringify(response.data)}`)
+                if (logger.isSillyEnabled()) logger.silly(`Fetched strategy trades: ${JSON.stringify(response.data)}`)
                 const data: TradeOpenJson[] = response.data
                 const tradeOpens = data.map(
                     (tradeOpenJson) => new TradeOpen(tradeOpenJson)

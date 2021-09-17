@@ -48,7 +48,7 @@ export function connect(): void {
     })
 
     socket.on("user_payload", async (strategies: StrategyJson[]) => {
-        logger.silly(`Received user_payload: ${JSON.stringify(strategies)}`)
+        if (logger.isSillyEnabled()) logger.silly(`Received user_payload: ${JSON.stringify(strategies)}`)
         await onUserPayload(strategies).catch(() => {
             return
         })
@@ -56,14 +56,14 @@ export function connect(): void {
 
     socket.on("buy_signal", async (signalJson: SignalJson) => {
         const timestamp = new Date()
-        logger.silly(`Received buy_signal: ${JSON.stringify(signalJson)}`)
+        if (logger.isSillyEnabled()) logger.silly(`Received buy_signal: ${JSON.stringify(signalJson)}`)
         await onBuySignal(signalJson, timestamp).catch(() => {
             return
         })
     })
     socket.on("sell_signal", async (signalJson: SignalJson) => {
         const timestamp = new Date()
-        logger.silly(`Received sell_signal: ${JSON.stringify(signalJson)}`)
+        if (logger.isSillyEnabled()) logger.silly(`Received sell_signal: ${JSON.stringify(signalJson)}`)
         await onSellSignal(signalJson, timestamp).catch(() => {
             return
         })
@@ -71,14 +71,14 @@ export function connect(): void {
 
     socket.on("close_traded_signal", async (signalJson: SignalJson) => {
         const timestamp = new Date()
-        logger.silly(`Received close_traded_signal: ${JSON.stringify(signalJson)}`)
+        if (logger.isSillyEnabled()) logger.silly(`Received close_traded_signal: ${JSON.stringify(signalJson)}`)
         await onCloseTradedSignal(signalJson, timestamp).catch(() => {
             return
         })
     })
     socket.on("stop_traded_signal", async (signalJson: SignalJson) => {
         const timestamp = new Date()
-        logger.silly(`Received stop_traded_signal: ${JSON.stringify(signalJson)}`)
+        if (logger.isSillyEnabled()) logger.silly(`Received stop_traded_signal: ${JSON.stringify(signalJson)}`)
         await onStopTradedSignal(signalJson, timestamp).catch(() => {
             return
         })

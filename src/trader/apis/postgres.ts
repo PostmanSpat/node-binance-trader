@@ -177,7 +177,7 @@ export async function loadObject(type: string): Promise<any> {
         return query(command, [process.env.NODE_ENV, type])
         .then((result) => {
             if (result.rows.length) {
-                logger.silly(`Loaded object "${type}": ${result.rows[0].json}`)
+                if (logger.isSillyEnabled()) logger.silly(`Loaded object "${type}": ${result.rows[0].json}`)
                 return Promise.resolve(fromJSON(result.rows[0].json))
             } else {
                 return Promise.resolve(undefined)
@@ -200,7 +200,7 @@ async function execute(commands: string[], params?: any[]) {
         for (let i = 0; i < commands.length; ++i) {
             const command = commands[i]
             const param = params ? params[i] : undefined
-            logger.silly(`Executing: ${command} ${param}`)
+            if (logger.isSillyEnabled()) logger.silly(`Executing: ${command} ${param}`)
             await client.query(command, param)
         }
     } finally {
@@ -211,7 +211,7 @@ async function execute(commands: string[], params?: any[]) {
 // Executes a single query and returns the results
 async function query(command: string, params?: any): Promise<QueryResult<any>> {
     const client = await pool.connect()
-    logger.silly(`Querying: ${command} ${params}`)
+    if (logger.isSillyEnabled()) logger.silly(`Querying: ${command} ${params}`)
     try {
         return await client.query(command, params)
     } finally {
