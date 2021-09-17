@@ -8,3 +8,8 @@ export interface Loan {
 export interface LoanTransaction {
     tranId: number
 }
+
+export interface Price {
+    symbol: string
+    price: string
+}

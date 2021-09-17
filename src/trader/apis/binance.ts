@@ -4,7 +4,7 @@ import env from "../env"
 import logger from "../../logger"
 import BigNumber from "bignumber.js"
 import { WalletType } from "../types/trader"
-import { Loan, LoanTransaction } from "../types/binance"
+import { Loan, LoanTransaction, Price } from "../types/binance"
 
 const logBinanceUndefined = "Binance client is undefined!"
 
@@ -37,7 +37,7 @@ export async function loadMarkets(isReload?: boolean): Promise<ccxt.Dictionary<c
     
     return binanceClient.loadMarkets(isReload)
         .then((value) => {
-            logger.silly(`Loaded markets: ${JSON.stringify(value)}`)
+            if (logger.isSillyEnabled()) logger.silly(`Loaded markets: ${JSON.stringify(value)}`)
             const markets = JSON.parse(JSON.stringify(value)) // Clone object.
             Object.keys(markets).forEach((key) => { // Work around the missing slash ("/") in BVA's signal data.
                 const keyNew = markets[key].id
@@ -53,13 +53,34 @@ export async function loadMarkets(isReload?: boolean): Promise<ccxt.Dictionary<c
         })
 }
 
-// Get the current price information for a given market
+// Loads the latest prices for all symbols
+export async function loadPrices() {
+    // Uses the Binance specific call for prices because the data packet is much smaller than the standard .fetchTickers() ccxt call
+    return await binanceClient.publicGetTickerPrice().then((value: Price[]) => {
+        const prices: Dictionary<BigNumber> = {}
+        
+        if (logger.isSillyEnabled()) logger.silly(`Loaded prices: ${JSON.stringify(value)}`)
+        // No need to clear the previous prices, if something has been deleted since last update then we don't really care
+        value.forEach((price) => {
+            // Convert prices array to dictionary for faster indexing
+            prices[price.symbol] = new BigNumber(price.price)
+        })
+        logger.debug(`Loaded ${value.length} prices.`)
+        return prices
+    })
+    .catch((reason: any) => {
+        logger.error(`Failed to get prices: ${reason}`)
+        return Promise.reject(reason)
+    })
+}
+
+// Get the current market bid and ask prices information for a given symbol
 export async function fetchTicker(market: ccxt.Market) {
     if (!binanceClient) return Promise.reject(logBinanceUndefined)
 
     return binanceClient.fetchTicker(market.symbol)
         .then((value) => {
-            logger.silly(`Loaded ticker: ${JSON.stringify(value)}`)
+            if (logger.isSillyEnabled()) logger.silly(`Loaded ticker: ${JSON.stringify(value)}`)
             logger.debug(`Loaded ${value.symbol} ticker, buy price is ${value.bid}, sell price is ${value.ask}.`)
             return value
         })
@@ -112,7 +133,7 @@ export async function fetchBalance(type: WalletType): Promise<ccxt.Balances> {
 
     return binanceClient.fetchBalance({type: type})
         .then((value) => {
-            logger.silly(`Fetched balance: ${JSON.stringify(value)}`)
+            if (logger.isSillyEnabled()) logger.silly(`Fetched balance: ${JSON.stringify(value)}`)
             logger.debug(`Loaded ${Object.keys(value).length} ${type} balances.`)
 
             // Cache for next time

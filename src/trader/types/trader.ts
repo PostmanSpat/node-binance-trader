@@ -16,6 +16,7 @@ export enum LongFundsType {
     BORROW_ALL = "borrow all",
     SELL_ALL = "sell all",
     SELL_LARGEST = "sell largest",
+    SELL_LARGEST_PNL = "sell largest pnl",
 }
 
 // Actions to execute trades
@@ -44,6 +45,7 @@ export interface TradingMetaData {
     tradesOpen: TradeOpen[]
     tradesClosing: Set<TradeOpen>
     markets: Dictionary<Market>
+    prices: Dictionary<BigNumber>
     virtualBalances: Dictionary<Dictionary<BigNumber>>
     transactions: Transaction[],
     balanceHistory: Dictionary<Dictionary<BalanceHistory[]>>

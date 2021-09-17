@@ -143,8 +143,8 @@ To add new Config Vars in Heroku:
 **Trader Features**
 | Key | Value Format | Description |
 | --- | --- | --- |
-| IS_BUY_QTY_FRACTION | true / false | Uses the 'Quantity to Buy' from the NBT Hub as a fraction of your wallet balance (e.g. 0.1 is 10%) |
-| TRADE_LONG_FUNDS | borrow min / borrow all / sell all / sell largest | See README for explanation |
+| IS_BUY_QTY_FRACTION | true / false | Uses the 'Quantity to spend per trade' from the NBT Hub as a fraction of your wallet balance (e.g. 0.1 is 10%) |
+| TRADE_LONG_FUNDS | borrow min / borrow all / sell all / sell largest / sell largest pnl | See README for explanation |
 | PRIMARY_WALLET | margin / spot | Primary wallet to execute LONG trades, it may still swap to the other if there are insufficient funds |
 | WALLET_BUFFER | decimal number >= 0 and < 1 | Decimal fraction of the total balance of each wallet that should be reserved for slippage, spread, and bad short trades (e.g. 0.02 is 2%) |
 | MAX_SHORT_TRADES | integer >= 0 | Maximum number of SHORT trades that can be open concurrently (i.e. limit your borrowing), zero is no limit |

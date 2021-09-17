@@ -53,11 +53,11 @@
       },
 
       "IS_BUY_QTY_FRACTION": {
-        "description": "Uses the 'Quantity to Buy' from the NBT Hub as a fraction of your wallet balance (e.g. 0.1 is 10%)",
+        "description": "Uses the 'Quantity to spend per trade' from the NBT Hub as a fraction of your wallet balance (e.g. 0.1 is 10%)",
         "required": false
       },
       "TRADE_LONG_FUNDS": {
-        "description": "Valid options: '', 'borrow min', 'borrow all', 'sell all', or 'sell largest' - see README for explanation",
+        "description": "Valid options: '', 'borrow min', 'borrow all', 'sell all', 'sell largest', or 'sell largest pnl' - see README for explanation",
         "required": false
       },
       "PRIMARY_WALLET": {

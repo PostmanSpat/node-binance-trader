@@ -12,6 +12,7 @@ import {
     fetchTicker,
     getMarginLoans,
     loadMarkets,
+    loadPrices,
     marginBorrow,
     marginRepay
 } from "./apis/binance"
@@ -50,6 +51,7 @@ export const tradingMetaData: TradingMetaData = {
     tradesOpen: [], // This is an array of type TradeOpen (see bva.ts) containing all the open trades
     tradesClosing: new Set(), // List of open trades that are currently in the processing queue and have not been executed on the Binance exchange, this includes rebalancing
     markets: {}, // This is a dictionary of the different trading symbols and limits that are supported on the Binance exchange
+    prices: {}, // This is a dictionary of the current prices for each symbol, note this is not specifically the buy or sell prices
     virtualBalances: {}, // The virtual wallets used to keep track of the balance for simulations
     transactions: [], // Array to keep a transaction history
     balanceHistory: {}, // Keeps the open and close balances over time for each quote coin, indexed by trading type then coin
@@ -1183,13 +1185,49 @@ async function executeTradeAction(
     // We want to know as close as possible to when the trade was executed on Binance so that we can compare to the incoming timestamp
     const timestamp = new Date()
 
-    // null is returned for virtual actions
-    if (result != null) {
+    // null is returned for virtual actions, so simulate a successful result object
+    if (result == null && (action == ActionType.BUY || action == ActionType.SELL)) {
+        // Get the current ticker price
+        const ticker = await fetchTicker(tradingMetaData.markets[tradeOpen.symbol]).catch((reason) => {
+            logger.silly("executeTradeAction->fetchTicker: " + reason)
+            return Promise.reject(reason)
+        })
+        const price = action == ActionType.BUY ? ticker.bid : ticker.ask
+
+        result = {
+            status: "closed",
+            price: price,
+            cost: tradeOpen.quantity.multipliedBy(price).toNumber(),
+
+            // Not used
+            id: "",
+            clientOrderId: "",
+            datetime: "",
+            timestamp: 0,
+            lastTradeTimestamp: 0,
+            symbol: "",
+            type: "",
+            side: 'buy',
+            amount: 0,
+            filled: 0,
+            remaining: 0,
+            trades: [],
+            fee: {
+                type: 'taker',
+                currency: "",
+                rate: 0,
+                cost: 0
+            },
+            info: null
+        }
+    }
+
+    // Result will still be null for virtual borrow / repay actions
+    if (result) {
         // Status is returned for real buy / sell orders
         if ("status" in result) {
             if (result.status == "closed") {
                 // Check if the price and cost is different than we expected (it usually is)
-                // TODO: It would be nice to feed these current prices back to the original trades when rebalancing
                 if (result.price) {
                     switch (action) {
                         case ActionType.BUY:
@@ -1859,7 +1897,7 @@ async function loadWalletBalances(tradingType: TradingType, market?: Market, quo
 // Calculates the trade quantity, cost, and amount to borrow based on available funds and the configured funding model
 // This may initiate rebalancing trades to free up necessary funds
 function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<WalletData>, preferred: WalletType[], primary: WalletType): {quantity: BigNumber, cost: BigNumber, borrow: BigNumber, wallet: WalletType} {
-    // Start with the default quantity to buy (cost) as entered into NBT Hub
+    // Start with the default quantity to spend (cost) as entered into NBT Hub
     let cost = tradingData.strategy.tradeAmount // The amount of the quote coin to trade (e.g. BTC for ETHBTC)
     let quantity = new BigNumber(0) // The amount of the base coin to trade (e.g. ETH for ETHBTC)
     let borrow = new BigNumber(0) // The amount of either the base (for SHORT) or quote (for LONG) that needs to be borrowed
@@ -1868,7 +1906,7 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
     if (env().IS_BUY_QTY_FRACTION) {
         // Check that the quantity can actually be used as a fraction
         if (cost.isGreaterThan(1)) {
-            const logMessage = `Failed to trade as quantity to buy is not a valid fraction: ${cost.toFixed()}.`
+            const logMessage = `Failed to trade as quantity to spend is not a valid fraction: ${cost.toFixed()}.`
             logger.error(logMessage)
             throw logMessage
         }
@@ -1920,6 +1958,7 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
                             break
                         case LongFundsType.SELL_ALL:
                         case LongFundsType.SELL_LARGEST:
+                        case LongFundsType.SELL_LARGEST_PNL:
                             // Calculate the potential for each wallet
                             for (let wallet of Object.values(wallets)) {
                                 // If there is nothing to rebalance, or the largest trade is already less than the free balance, then there is no point reducing anything
@@ -1929,7 +1968,7 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
                                     // Clear the trades so that we don't try to rebalance anything later
                                     wallet.trades = []
                                 } else {
-                                    if (model == LongFundsType.SELL_ALL) {
+                                    if (model == LongFundsType.SELL_ALL || model == LongFundsType.SELL_LARGEST_PNL) {
                                         // Deduct any stopped trades as these cannot be rebalanced
                                         wallet.trades.forEach(trade => {
                                             if (trade.isStopped) {
@@ -1941,6 +1980,7 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
 
                                         // All trades may not have equivalent costs, due to the fact that we don't re-buy remaining trades after one is closed, i.e. new trades can use the full free balance
                                         // So we have to go through and work out which of the highest trades need to be rebalanced so that the new trade is of equal cost to at least one other
+                                        // Even for Sell Largest PnL we will only consider trades that are above the average size, this ensures that we still get some balance in the trade sizes
                                         let smaller = true
                                         // Loop through and kick out any trades that are smaller than the average, keep going until we have the exact set of trades to rebalance and the average of just those trades
                                         while (smaller) {
@@ -1967,7 +2007,26 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
                                             // Keep the remaining list of large trades
                                             wallet.trades = largeTrades
                                         }
-                                    } else {
+
+                                        if (model == LongFundsType.SELL_LARGEST_PNL) {
+                                            // Now work out which of the largest trades has the best PnL
+                                            let best: BigNumber | null = null
+                                            wallet.trades.forEach(trade => {
+                                                // Calculate the relative change in price since opening the LONG trade
+                                                // Prices should already have been refreshed when the open signal was received
+                                                // The price difference won't be exactly right because we're not looking at the market ask price, but it is all relative
+                                                const diff = tradingMetaData.prices[tradingData.signal.symbol].minus(trade.priceBuy!).dividedBy(trade.priceBuy!)
+                                                logger.debug(`${getLogName(trade)} price has changed by ${diff.multipliedBy(100)}%.`)
+                                                if (best == null || diff.isGreaterThan(best)) {
+                                                    // Replace the largest trade, the wallet potential will be recalculated later
+                                                    wallet.largestTrade = trade
+                                                    best = diff
+                                                }
+                                            })
+                                        }
+                                    }
+                                    
+                                    if (model == LongFundsType.SELL_LARGEST || model == LongFundsType.SELL_LARGEST_PNL) {
                                         // Using half of the largest trade plus the free balance, both trades should then be equal
                                         // This may not halve the largest trade, it might only take a piece
                                         wallet.potential = wallet.free.plus(wallet.largestTrade.cost!).dividedBy(2)
@@ -2078,6 +2137,14 @@ async function createTradeOpen(tradingData: TradingData): Promise<TradeOpen> {
         logger.silly("createTradeOpen->loadWalletBalances: " + reason)
         return Promise.reject(reason)
     })
+
+    // Get the latest prices only if we know they are needed, doing it here because calculateTradeSize is not async
+    if (tradingData.signal.positionType == PositionType.LONG && env().TRADE_LONG_FUNDS == LongFundsType.SELL_LARGEST_PNL) {
+        await refreshPrices().catch((reason) => {
+            logger.silly("createTradeOpen->refreshPrices: " + reason)
+            return Promise.reject(reason)
+        })
+    }
 
     // Calculate the trade size and selected wallet based on the configured funding model, may initiate rebalancing
     const {quantity, cost, borrow, wallet} = calculateTradeSize(tradingData, wallets, preferred, primary)
@@ -2479,7 +2546,7 @@ let marketCached = 0
 async function refreshMarkets() {
     const elapsed = Date.now() - marketCached
     // Only load if markets haven't been cached yet, or it has been more than 24 hours
-    const reload = Object.keys(tradingMetaData.markets).length == 0 || elapsed >= 24 * 60 * 60 * 1000
+    const reload = Object.keys(tradingMetaData.markets).length == 0 || elapsed >= 24 * 60 * 60 * 1000 || elapsed < 0
     
     if (reload) {
         tradingMetaData.markets = await loadMarkets(reload).catch((reason) => {
@@ -2492,6 +2559,24 @@ async function refreshMarkets() {
 
         // Potentially some symbols may have been withdrawn from Binance, so need to check we don't have any open trades for them
         checkOpenTrades()
+    }
+}
+
+// This will update the prices dictionary in the tradingMetaData if more than 1 minute since previously loaded
+let pricesCached = 0
+async function refreshPrices() {
+    const elapsed = Date.now() - pricesCached
+    // Only load if prices haven't been cached yet, or it has been more than 1 minute
+    const reload = Object.keys(tradingMetaData.prices).length == 0 || elapsed >= 60 * 1000 || elapsed < 0
+    
+    if (reload) {
+        tradingMetaData.prices = await loadPrices().catch((reason) => {
+            logger.silly("refreshPrices->loadPrices: " + reason)
+            return Promise.reject(reason)
+        })
+
+        // Remember last cached time
+        pricesCached = Date.now()
     }
 }
 
@@ -2679,7 +2764,7 @@ async function startUp() {
         // If the process restarts we'll lose the queue, so no need to reload tradesClosing
         // Transactions can be huge, so we save them differently
         // We don't need to keep the public strategies, it is just for info
-        const excluded = [ "markets", "tradesClosing", "transactions", "publicStrategies" ]
+        const excluded = [ "markets", "prices", "tradesClosing", "transactions", "publicStrategies" ]
 
         for (const type of Object.keys(tradingMetaData)) {
             if (!excluded.includes(type)) {

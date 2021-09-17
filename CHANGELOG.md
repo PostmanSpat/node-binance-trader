@@ -4,6 +4,7 @@
 
 * **trader:** rebalancing will not occur if rounding is more than 50%, or remaining quantity is too small.
 * **trader:** stopped repeating BNB free threshold message.
+* **trader:** do not generate silly messages if not needed.
 
 ### Features
 
@@ -20,6 +21,7 @@
 * **trader:** tracking public strategies.
 * **trader:** added transaction summary graphs in the web UI.
 * **trader:** web UI facelift.
+* **trader:** added Sell Largest PnL funding option.
 
 ## [1.1.0] (2021-08-09)
 
