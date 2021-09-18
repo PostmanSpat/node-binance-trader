@@ -60,6 +60,10 @@
         "description": "Valid options: '', 'borrow min', 'borrow all', 'sell all', 'sell largest', or 'sell largest pnl' - see README for explanation",
         "required": false
       },
+      "IS_FUNDS_NO_LOSS": {
+        "description": "Will not sell trades for a loss when using one of the sell options of TRADE_LONG_FUNDS",
+        "required": false
+      },
       "PRIMARY_WALLET": {
         "description": "Valid options: 'margin' or 'spot' - primary wallet to execute LONG trades, it may still swap to the other if there are insufficient funds",
         "required": false

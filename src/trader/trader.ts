@@ -315,7 +315,7 @@ async function loadPreviousOpenTrades(strategies: Dictionary<Strategy>): Promise
                 const {preferred, primary} = getPreferredWallets(market, trade.positionType)
                 
                 // Calculate the potential funds that could be used for this trade in each wallet
-                preferred.forEach(w => {
+                for (const w of preferred) {
                     if (!wallets[market.base]) wallets[market.base] = {}
                     if (!wallets[market.base][w]) {
                         wallets[market.base][w] = new WalletData(w)
@@ -331,7 +331,7 @@ async function loadPreviousOpenTrades(strategies: Dictionary<Strategy>): Promise
                         // Otherwise use equal portions of the balance for each trade
                         wallets[market.base][w].potential = wallets[market.base][w].free.dividedBy(wallets[market.base][w].trades.length + 1)
                     }
-                })
+                }
                 
                 // Use the preferred wallet or the one with with the best potential
                 const wallet = getBestWallet(trade.quantity, preferred, wallets[market.base])
@@ -419,7 +419,7 @@ async function loadPreviousOpenTrades(strategies: Dictionary<Strategy>): Promise
         }
 
         // Update optional properties for virtual trades, no way of matching the quantity so just use what was sent
-        virtualTrades.forEach(trade => {
+        for (const trade of virtualTrades) {
             const market = tradingMetaData.markets[trade.symbol]
             switch (trade.positionType) {
                 case PositionType.SHORT:
@@ -437,7 +437,7 @@ async function loadPreviousOpenTrades(strategies: Dictionary<Strategy>): Promise
                     trade.borrow = new BigNumber(0)
                     break
             }
-        })
+        }
 
         // Update virtual balances to match existing trades
         resetVirtualBalances(virtualTrades)
@@ -1192,7 +1192,7 @@ async function executeTradeAction(
             logger.silly("executeTradeAction->fetchTicker: " + reason)
             return Promise.reject(reason)
         })
-        let price = action == ActionType.BUY ? ticker.bid : ticker.ask
+        let price = action == ActionType.BUY ? ticker.ask : ticker.bid
         // Unlikely, but price might be 0 if there are no orders
         if (!price) price = (action == ActionType.BUY ? tradeOpen.priceBuy! : tradeOpen.priceSell!).toNumber()
 
@@ -1832,13 +1832,6 @@ async function loadWalletBalances(tradingType: TradingType, market?: Market, quo
                     // Keep the list of active LONG trades
                     // We still need to include the stopped trades here so we can subtract them from the total later
                     wallets[trade.wallet].trades.push(trade)
-
-                    // Find the largest active LONG trade
-                    // We're going to ignore anything that is stopped, hopefully there will be other trades to choose from
-                    // TODO: It would be nice to use current market price instead of cost calculated from opening price
-                    if (!trade.isStopped && (wallets[trade.wallet].largestTrade == undefined || trade.cost.isGreaterThan(wallets[trade.wallet].largestTrade!.cost!))) {
-                        wallets[trade.wallet].largestTrade = trade
-                    }
                 }
             }
             // If there is a different strategy that is using a different quote currency, but with open LONG trades sharing this base currency
@@ -1870,7 +1863,7 @@ async function loadWalletBalances(tradingType: TradingType, market?: Market, quo
 
     // Calculate wallet totals and subtract the buffer
     let totalBalance = new BigNumber(0)
-    Object.values(wallets).forEach(wallet => {
+    for (const wallet of Object.values(wallets)) {
         wallet.total = wallet.free.plus(wallet.locked)
         totalBalance = totalBalance.plus(wallet.total)
 
@@ -1883,7 +1876,7 @@ async function loadWalletBalances(tradingType: TradingType, market?: Market, quo
             logMessage += ` with a buffer of ${buffer}`
         }
         logger.debug(`${logMessage}.`)
-    })
+    }
 
     // If not called from an opening trade then there will be no market data, so may not be a quote asset we're tracking
     // Also only want to update balances when all wallets have been loaded
@@ -1963,23 +1956,61 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
                         case LongFundsType.SELL_LARGEST_PNL:
                             // Calculate the potential for each wallet
                             for (let wallet of Object.values(wallets)) {
+                                // Deduct and remove any stopped trades as these cannot be rebalanced
+                                for (const trade of wallet.trades) {
+                                    if (trade.isStopped) {
+                                        logger.debug(`${getLogName(trade)} trade is stopped so will not be used for rebalancing.`)
+                                        wallet.total = wallet.total.minus(trade.cost!)
+                                    }
+                                }
+                                wallet.trades = wallet.trades.filter(trade => !trade.isStopped)
+                                
+                                if (env().IS_FUNDS_NO_LOSS) {
+                                    // Find only the trades that are expected to not make a loss if we sell them now
+                                    const profitTrades: TradeOpen[] = []
+                                    // Need to apply fees to both the buy and sell price to ensure overall profit or loss is calculated
+                                    const buyFee = 1 + (env().TAKER_FEE_PERCENT / 100)
+                                    const sellFee = 1 - (env().TAKER_FEE_PERCENT / 100)
+                                    for (const trade of wallet.trades) {
+                                        // Calculate the difference in price since opening the LONG trade
+                                        // Prices should already have been refreshed when the open signal was received
+                                        // The price difference won't be exactly right because we're not looking at the market ask price, but hopefully it is close enough
+                                        const diff = tradingMetaData.prices[trade.symbol].multipliedBy(sellFee).minus(trade.priceBuy!.multipliedBy(buyFee))
+                                        // Do not sell for a loss, but can break even
+                                        if (diff.isGreaterThanOrEqualTo(0)) {
+                                            profitTrades.push(trade)
+                                        } else {
+                                            logger.debug(`${getLogName(trade)} price has changed from ${trade.priceBuy!} to ${tradingMetaData.prices[trade.symbol]}, loss is ${diff} with fees, so it will not be used for rebalancing.`)
+                                            wallet.total = wallet.total.minus(trade.cost!)
+                                        }
+                                    }
+
+                                    if (wallet.trades.length && !profitTrades.length) {
+                                        // Not going to show this message normally as we don't know which wallet will be chosen
+                                        logger.debug(`Cannot use any trades in ${wallet.type} for rebalancing as they would each make a loss if sold now.`)
+                                    }
+
+                                    // Replace the list of trades for the wallet
+                                    wallet.trades = profitTrades
+                                }
+
+                                // Find the largest active LONG trade
+                                let largest: TradeOpen | undefined = undefined
+                                for (const trade of wallet.trades) {
+                                    // TODO: It would be nice to use current market price instead of cost calculated from opening price
+                                    if (trade.cost && (largest == undefined || trade.cost.isGreaterThan(largest.cost!))) {
+                                        largest = trade
+                                    }
+                                }
+
                                 // If there is nothing to rebalance, or the largest trade is already less than the free balance, then there is no point reducing anything
-                                if (!wallet.largestTrade || wallet.free.isGreaterThanOrEqualTo(wallet.largestTrade.cost!)) {
-                                    if (wallet.largestTrade) logger.debug(`Free ${tradingData.market.quote} amount on ${wallet.type} is already more than the cost of the largest trade.`)
+                                if (!largest || wallet.free.isGreaterThanOrEqualTo(largest.cost!)) {
+                                    if (largest) logger.debug(`Free ${tradingData.market.quote} amount on ${wallet.type} is already more than the cost of the largest trade.`)
                                     wallet.potential = wallet.free
                                     // Clear the trades so that we don't try to rebalance anything later
                                     wallet.trades = []
                                 } else {
                                     if (model == LongFundsType.SELL_ALL || model == LongFundsType.SELL_LARGEST_PNL) {
-                                        // Deduct any stopped trades as these cannot be rebalanced
-                                        wallet.trades.forEach(trade => {
-                                            if (trade.isStopped) {
-                                                logger.debug(`${getLogName(trade)} trade is stopped so will not be used for rebalancing.`)
-                                                wallet.total = wallet.total.minus(trade.cost!)
-                                            }
-                                        })
-                                        wallet.trades = wallet.trades.filter(trade => !trade.isStopped)
-
                                         // All trades may not have equivalent costs, due to the fact that we don't re-buy remaining trades after one is closed, i.e. new trades can use the full free balance
                                         // So we have to go through and work out which of the highest trades need to be rebalanced so that the new trade is of equal cost to at least one other
                                         // Even for Sell Largest PnL we will only consider trades that are above the average size, this ensures that we still get some balance in the trade sizes
@@ -1992,7 +2023,7 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
                                             // Note we're going to overwrie the total and trades for this wallet because it is easier for processing, we shouldn't need the originals anymore
                                             wallet.total = new BigNumber(0)
                                             const largeTrades: TradeOpen[] = []
-                                            wallet.trades.forEach(trade => {
+                                            for (const trade of wallet.trades) {
                                                 if (trade.cost!.isGreaterThanOrEqualTo(wallet.potential!)) {
                                                     largeTrades.push(trade)
                                                     // Keep a new total of only the large trades to calculate a new average
@@ -2003,7 +2034,7 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
                                                     // The list of trades is different, so we'll need to loop again and calculate a new average
                                                     smaller = true
                                                 }
-                                            })
+                                            }
                                             // Add the usable free balance back to the remaining total trades
                                             wallet.total = wallet.total.plus(wallet.free)
                                             // Keep the remaining list of large trades
@@ -2013,27 +2044,27 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
                                         if (model == LongFundsType.SELL_LARGEST_PNL) {
                                             // Now work out which of the largest trades has the best PnL
                                             let best: BigNumber | null = null
-                                            wallet.trades.forEach(trade => {
+                                            for (const trade of wallet.trades) {
                                                 // Calculate the relative change in price since opening the LONG trade
                                                 // Prices should already have been refreshed when the open signal was received
                                                 // The price difference won't be exactly right because we're not looking at the market ask price, but it is all relative
-                                                const diff = tradingMetaData.prices[tradingData.signal.symbol].minus(trade.priceBuy!).dividedBy(trade.priceBuy!)
-                                                logger.debug(`${getLogName(trade)} price has changed from ${trade.priceBuy!} to ${tradingMetaData.prices[tradingData.signal.symbol]} (${diff.multipliedBy(100).toFixed(3)}%).`)
+                                                const diff = tradingMetaData.prices[trade.symbol].minus(trade.priceBuy!).dividedBy(trade.priceBuy!)
+                                                logger.debug(`${getLogName(trade)} price has changed from ${trade.priceBuy!} to ${tradingMetaData.prices[trade.symbol]} (${diff.multipliedBy(100).toFixed(3)}%).`)
                                                 if (best == null || diff.isGreaterThan(best)) {
                                                     // Replace the largest trade, the wallet potential will be recalculated later
-                                                    wallet.largestTrade = trade
+                                                    largest = trade
                                                     best = diff
                                                 }
-                                            })
+                                            }
                                         }
                                     }
                                     
                                     if (model == LongFundsType.SELL_LARGEST || model == LongFundsType.SELL_LARGEST_PNL) {
                                         // Using half of the largest trade plus the free balance, both trades should then be equal
                                         // This may not halve the largest trade, it might only take a piece
-                                        wallet.potential = wallet.free.plus(wallet.largestTrade.cost!).dividedBy(2)
+                                        wallet.potential = wallet.free.plus(largest.cost!).dividedBy(2)
                                         // Overwrite the list of trades to make it easier for rebalancing later, we shouldn't need the original anymore
-                                        wallet.trades = [wallet.largestTrade]
+                                        wallet.trades = [largest]
                                     }
                                 }
                             }
@@ -2141,7 +2172,7 @@ async function createTradeOpen(tradingData: TradingData): Promise<TradeOpen> {
     })
 
     // Get the latest prices only if we know they are needed, doing it here because calculateTradeSize is not async
-    if (tradingData.signal.positionType == PositionType.LONG && env().TRADE_LONG_FUNDS == LongFundsType.SELL_LARGEST_PNL) {
+    if (tradingData.signal.positionType == PositionType.LONG && (env().IS_FUNDS_NO_LOSS || env().TRADE_LONG_FUNDS == LongFundsType.SELL_LARGEST_PNL)) {
         await refreshPrices().catch((reason) => {
             logger.silly("createTradeOpen->refreshPrices: " + reason)
             return Promise.reject(reason)
@@ -2243,7 +2274,7 @@ export function resetVirtualBalances(virtualTrades?: TradeOpen[]) {
         virtualTrades = tradingMetaData.tradesOpen.filter(trade => trade.tradingType == TradingType.virtual)
     }
 
-    virtualTrades.forEach(trade => {
+    for (const trade of virtualTrades) {
         const market = tradingMetaData.markets[trade.symbol]
         initialiseVirtualBalances(trade.wallet!, market)
         switch (trade.positionType) {
@@ -2259,7 +2290,7 @@ export function resetVirtualBalances(virtualTrades?: TradeOpen[]) {
                 if (tradingMetaData.virtualBalances[trade.wallet!][market.quote].isLessThan(0)) tradingMetaData.virtualBalances[trade.wallet!][market.quote] = new BigNumber(0)
                 break
         }
-    })
+    }
 
     saveState("virtualBalances")
 }
@@ -2665,7 +2696,7 @@ export async function topUpBNBFloat(wallet: WalletType, quote: string): Promise<
     }
 
     // Get the latest buy price
-    const price = new BigNumber((await fetchTicker(market)).bid)
+    const price = new BigNumber((await fetchTicker(market)).ask)
 
     if (!price.isGreaterThan(0)) {
         const logMessage = logPrefix + `the current price is invalid.`
@@ -2742,6 +2773,7 @@ async function run() {
     if (env().BNB_FREE_THRESHOLD > 0 && env().BNB_FREE_FLOAT > 0 && env().BNB_FREE_FLOAT <= env().BNB_FREE_THRESHOLD) issues.push("BNB_FREE_FLOAT must be more than BNB_FREE_THRESHOLD.")
     if (env().TAKER_FEE_PERCENT < 0) issues.push("TAKER_FEE_PERCENT must be 0 or more.")
     if (env().MIN_COST_BUFFER < 0) issues.push("MIN_COST_BUFFER must be 0 or more.")
+    if (env().IS_FUNDS_NO_LOSS && ![LongFundsType.SELL_ALL, LongFundsType.SELL_LARGEST, LongFundsType.SELL_LARGEST_PNL].includes(env().TRADE_LONG_FUNDS)) issues.push("IS_FUNDS_NO_LOSS should be false if not using one of the 'sell' options for TRADE_LONG_FUNDS.")
     if (!env().IS_TRADE_MARGIN_ENABLED && env().PRIMARY_WALLET == WalletType.MARGIN) issues.push(`PRIMARY_WALLET cannot be ${WalletType.MARGIN} if IS_TRADE_MARGIN_ENABLED is false.`)
     if (!env().IS_TRADE_MARGIN_ENABLED && (env().TRADE_LONG_FUNDS == LongFundsType.BORROW_ALL || env().TRADE_LONG_FUNDS == LongFundsType.BORROW_MIN)) issues.push(`TRADE_LONG_FUNDS cannot be ${env().TRADE_LONG_FUNDS} if IS_TRADE_MARGIN_ENABLED is false.`)
     if (env().IS_NOTIFIER_GMAIL_ENABLED && (!env().NOTIFIER_GMAIL_ADDRESS || !env().NOTIFIER_GMAIL_APP_PASSWORD)) issues.push("NOTIFIER_GMAIL_ADDRESS and NOTIFIER_GMAIL_APP_PASSWORD are required for IS_NOTIFIER_GMAIL_ENABLED.")

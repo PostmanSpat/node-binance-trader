@@ -67,7 +67,6 @@ export class WalletData {
     total: BigNumber // Free + Locked
     potential?: BigNumber // Potental funds after rebalancing
     trades: TradeOpen[] // List of associated open trades
-    largestTrade?: TradeOpen // Largest open trade
 
     constructor(type: WalletType) {
         this.type = type
