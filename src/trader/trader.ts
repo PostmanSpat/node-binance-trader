@@ -519,36 +519,41 @@ function checkStrategyChanges(strategies: Dictionary<Strategy>) {
 }
 
 // Checks to see if all your open trades are also still open on the NBT Hub
+// To stop this from spamming while you are setting up your strategies, we'll only run it if it has been more than two minutes
+let checkedStrategies = 0
 async function compareStrategyTrades() {
-    logger.info("Comparing open trades to source strategies...")
-    // Only check the strategies that are still running normally
-    for (let strategy of Object.values(tradingMetaData.strategies).filter(strategy => strategy.isActive && !strategy.isStopped)) {
-        // Find all trades for this strategy that are open
-        const userTrades = tradingMetaData.tradesOpen.filter(trade => trade.strategyId == strategy.id && !trade.isStopped)
-        // Only compare if at least on trade is open
-        if (userTrades.length) {
-            // Retrieve the strategy's open trades from the NBT Hub
-            const stratTrades = await getStratTradeOpenList(strategy.id).catch((reason) => {
-                logger.silly("compareStrategyTrades->getStratTradeOpenList: " + reason)
-                // As nothing is waiting for this, we'll just exit if there is a failure
-                return Promise.resolve(undefined)
-            })
-            if (stratTrades == undefined) return Promise.resolve()
+    const elapsed = Date.now() - checkedStrategies
+    if (elapsed >= 2 * 60 * 1000 || elapsed < 0) {
+        logger.info("Comparing open trades to source strategies...")
+        // Only check the strategies that are still running normally
+        for (let strategy of Object.values(tradingMetaData.strategies).filter(strategy => strategy.isActive && !strategy.isStopped)) {
+            // Find all trades for this strategy that are open
+            const userTrades = tradingMetaData.tradesOpen.filter(trade => trade.strategyId == strategy.id && !trade.isStopped)
+            // Only compare if at least on trade is open
+            if (userTrades.length) {
+                // Retrieve the strategy's open trades from the NBT Hub
+                const stratTrades = await getStratTradeOpenList(strategy.id).catch((reason) => {
+                    logger.silly("compareStrategyTrades->getStratTradeOpenList: " + reason)
+                    // As nothing is waiting for this, we'll just exit if there is a failure
+                    return Promise.resolve(undefined)
+                })
+                if (stratTrades == undefined) return Promise.resolve()
 
-            // Check that each open user trade is still open in the strategy
-            for (const tradeOpen of userTrades) {
-                if (!getTradeOpenFiltered(tradeOpen, stratTrades).length) {
-                    const logMessage = `${getLogName(tradeOpen)} trade is no longer open in the source strategy, you may have missed the close signal.`
-                    logger.warn(logMessage)
-                    // Send notification that the trade is no longer valid
-                    notifyAll(getNotifierMessage(MessageType.WARN, undefined, undefined, tradeOpen, logMessage as string)).catch((reason) => {
-                        logger.silly("checkOpenTrades->notifyAll: " + reason)
-                    })
+                // Check that each open user trade is still open in the strategy
+                for (const tradeOpen of userTrades) {
+                    if (!getTradeOpenFiltered(tradeOpen, stratTrades).length) {
+                        const logMessage = `${getLogName(tradeOpen)} trade is no longer open in the source strategy, you may have missed the close signal.`
+                        logger.warn(logMessage)
+                        // Send notification that the trade is no longer valid
+                        notifyAll(getNotifierMessage(MessageType.WARN, undefined, undefined, tradeOpen, logMessage as string)).catch((reason) => {
+                            logger.silly("checkOpenTrades->notifyAll: " + reason)
+                        })
+                    }
                 }
             }
         }
+        checkedStrategies = Date.now()
     }
-
 }
 
 // Process automatic buy signal from NBT Hub
