@@ -2018,7 +2018,7 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
                                                 // Prices should already have been refreshed when the open signal was received
                                                 // The price difference won't be exactly right because we're not looking at the market ask price, but it is all relative
                                                 const diff = tradingMetaData.prices[tradingData.signal.symbol].minus(trade.priceBuy!).dividedBy(trade.priceBuy!)
-                                                logger.debug(`${getLogName(trade)} price has changed by ${diff.multipliedBy(100)}%.`)
+                                                logger.debug(`${getLogName(trade)} price has changed from ${trade.priceBuy!} to ${tradingMetaData.prices[tradingData.signal.symbol]} (${diff.multipliedBy(100).toFixed(3)}%).`)
                                                 if (best == null || diff.isGreaterThan(best)) {
                                                     // Replace the largest trade, the wallet potential will be recalculated later
                                                     wallet.largestTrade = trade
