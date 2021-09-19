@@ -1896,7 +1896,7 @@ async function loadWalletBalances(tradingType: TradingType, market?: Market, quo
 
 // Calculates the trade quantity, cost, and amount to borrow based on available funds and the configured funding model
 // This may initiate rebalancing trades to free up necessary funds
-function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<WalletData>, preferred: WalletType[], primary: WalletType): {quantity: BigNumber, cost: BigNumber, borrow: BigNumber, wallet: WalletType} {
+async function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<WalletData>, preferred: WalletType[], primary: WalletType): Promise<{ quantity: BigNumber; cost: BigNumber; borrow: BigNumber; wallet: WalletType }> {
     // Start with the default quantity to spend (cost) as entered into NBT Hub
     let cost = tradingData.strategy.tradeAmount // The amount of the quote coin to trade (e.g. BTC for ETHBTC)
     let quantity = new BigNumber(0) // The amount of the base coin to trade (e.g. ETH for ETHBTC)
@@ -1908,7 +1908,7 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
         if (cost.isGreaterThan(1)) {
             const logMessage = `Failed to trade as quantity to spend is not a valid fraction: ${cost.toFixed()}.`
             logger.error(logMessage)
-            throw logMessage
+            return Promise.reject(logMessage)
         }
 
         // Calculate the fraction of the total balance
@@ -1959,6 +1959,14 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
                         case LongFundsType.SELL_ALL:
                         case LongFundsType.SELL_LARGEST:
                         case LongFundsType.SELL_LARGEST_PNL:
+                            // Get the latest prices only if we know they are needed
+                            if (env().IS_FUNDS_NO_LOSS || env().TRADE_LONG_FUNDS == LongFundsType.SELL_LARGEST_PNL) {
+                                await refreshPrices().catch((reason) => {
+                                    logger.silly("calculateTradeSize->refreshPrices: " + reason)
+                                    return Promise.reject(reason)
+                                })
+                            }
+
                             // Calculate the potential for each wallet
                             for (let wallet of Object.values(wallets)) {
                                 // Deduct and remove any stopped trades as these cannot be rebalanced
@@ -1985,14 +1993,14 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
                                         if (diff.isGreaterThanOrEqualTo(0)) {
                                             profitTrades.push(trade)
                                         } else {
-                                            logger.debug(`${getLogName(trade)} price has changed from ${trade.priceBuy!} to ${tradingMetaData.prices[trade.symbol]}, loss is ${diff} with fees, so it will not be used for rebalancing.`)
+                                            logger.debug(`${getLogName(trade)} price has changed from ${trade.priceBuy!} to ${tradingMetaData.prices[trade.symbol]}, loss would be ${diff} with fees, so it will not be used for rebalancing.`)
                                             wallet.total = wallet.total.minus(trade.cost!)
                                         }
                                     }
 
                                     if (wallet.trades.length && !profitTrades.length) {
-                                        // Not going to show this message normally as we don't know which wallet will be chosen
-                                        logger.debug(`Cannot use any trades in ${wallet.type} for rebalancing as they would each make a loss if sold now.`)
+                                        // Even if this wallet is not chosen, it has open trades so we will still report it
+                                        logger.info(`Cannot use any trades in ${wallet.type} for rebalancing as they would each make a loss if sold now.`)
                                     }
 
                                     // Replace the list of trades for the wallet
@@ -2086,7 +2094,7 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
                                 if (cost.isLessThan(getMinCost(tradingData.market))) {
                                     const logMessage = `Failed to trade as rebalancing to free up ${cost.toFixed()} ${tradingData.market.quote} would be less than the minimum trade cost of ${getMinCost(tradingData.market)} ${tradingData.market.quote}.`
                                     logger.error(logMessage)
-                                    throw logMessage
+                                    return Promise.reject(logMessage)
                                 }
 
                                 // Rebalance all the remaining trades in this wallet to the calculated trade size
@@ -2107,7 +2115,7 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
                                     cost = use.free
                                 }
                             } else {
-                                logger.debug(`No ${tradingData.market.quote} trades to be rebalanced, so just using the available amount of ${cost.toFixed()}  instead.`)
+                                logger.debug(`No ${tradingData.market.quote} trades to be rebalanced, so just using the available amount of ${cost.toFixed()} instead.`)
                             }
                             break
                     }
@@ -2118,7 +2126,7 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
                     if (cost.isLessThan(getMinCost(tradingData.market))) {
                         const logMessage = `Failed to trade as available ${use.type} funds of ${cost.toFixed()} ${tradingData.market.quote} would be less than the minimum trade cost of ${getMinCost(tradingData.market)} ${tradingData.market.quote}.`
                         logger.error(logMessage)
-                        throw logMessage
+                        return Promise.reject(logMessage)
                     }
 
                     // Recalculate the purchase quantity based on the new cost
@@ -2141,16 +2149,16 @@ function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<Wallet
         // Something is wrong, maybe the wallet buffer, hopefully this won't happen
         const logMessage = `Failed to trade as cost is invalid.`
         logger.error(logMessage)
-        throw logMessage
+        return Promise.reject(logMessage)
     }
 
     // Success
-    return {
+    return Promise.resolve({
         quantity,
         cost,
         borrow,
         wallet: preferred[0]
-    }
+    })
 }
 
 // Calculates the trade quantity/cost for an open trade signal based on the user configuration, then generates a new TradeOpen structure
@@ -2176,16 +2184,11 @@ async function createTradeOpen(tradingData: TradingData): Promise<TradeOpen> {
         return Promise.reject(reason)
     })
 
-    // Get the latest prices only if we know they are needed, doing it here because calculateTradeSize is not async
-    if (tradingData.signal.positionType == PositionType.LONG && (env().IS_FUNDS_NO_LOSS || env().TRADE_LONG_FUNDS == LongFundsType.SELL_LARGEST_PNL)) {
-        await refreshPrices().catch((reason) => {
-            logger.silly("createTradeOpen->refreshPrices: " + reason)
-            return Promise.reject(reason)
-        })
-    }
-
     // Calculate the trade size and selected wallet based on the configured funding model, may initiate rebalancing
-    const {quantity, cost, borrow, wallet} = calculateTradeSize(tradingData, wallets, preferred, primary)
+    const {quantity, cost, borrow, wallet} = await calculateTradeSize(tradingData, wallets, preferred, primary).catch((reason) => {
+        logger.silly("createTradeOpen->calculateTradeSize: " + reason)
+        return Promise.reject(reason)
+    })
 
     let msg = `${getLogName(tradingData.signal)} trade will be executed on ${wallet}, total of ${quantity.toFixed()} ${tradingData.market.base} for ${cost.toFixed()} ${tradingData.market.quote}.`
     if (borrow.isGreaterThan(0)) {
