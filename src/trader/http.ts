@@ -445,6 +445,11 @@ function makeCommands(page: Pages, record: any) : string {
         case "undefined":
             // Page buttons
             switch (page) {
+                case Pages.TRADES:
+                    commands += "<div>"
+                    commands += makeButton("BVA", "", `https://bitcoinvsalts.com/trades`, "_blank")
+                    commands += "</div>"
+                    break
                 case Pages.STRATEGIES:
                     commands += "<div>"
                     commands += makeButton("BVA", "", `https://bitcoinvsaltcoins.com/profile`, "_blank")
