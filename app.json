@@ -51,6 +51,10 @@
         "description": "Minimum level of notifications that will be sent (info, success, warn, error)",
         "required": false
       },
+      "IS_NOTIFIER_SHORT": {
+        "description": "Selects if the shorter version of the notification messages should be used",
+        "required": false
+      },
 
       "IS_BUY_QTY_FRACTION": {
         "description": "Uses the 'Quantity to spend per trade' from the NBT Hub as a fraction of your wallet balance (e.g. 0.1 is 10%)",

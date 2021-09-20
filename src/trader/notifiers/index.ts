@@ -1,6 +1,7 @@
 import BigNumber from "bignumber.js"
 import { basename } from "path/posix"
 import logger from "../../logger"
+import { trade } from "../trader"
 import { EntryType, PositionType, Signal, TradeOpen } from "../types/bva"
 import { MessageType, Notifier, NotifierMessage } from "../types/notifier"
 import { SourceType } from "../types/trader"
@@ -48,10 +49,10 @@ export function getNotifierMessage(
 ): NotifierMessage {
     const type = tradeOpen ? "trade" : signal ? "signal" : "Notification"
     const action = signal
-        ? `${signal.entryType as EntryType} ${signal.symbol} ${signal.positionType} ${type}.`
+        ? `${signal.entryType} ${signal.symbol} ${signal.positionType} ${type}.`
         : tradeOpen
         ? `${tradeOpen.symbol} ${tradeOpen.positionType} ${type}.`
-        : type
+        : `${type}.`
 
     const base = `${messageType} ${action}`.trim()
     const colour = messageType == MessageType.SUCCESS ? "#008000" : "#ff0000"
@@ -59,49 +60,96 @@ export function getNotifierMessage(
         ? `<b>${action}</b>`
         : `<font color=${colour}><b>${messageType}</b></font> ${action}`
     
-    const content: string[] = [""]
+    const content: string[] = []
+    let contentRaw = base
 
-    if (source) {
-        content.push("source: " + source)
-    }
+    if (env().IS_NOTIFIER_SHORT) {
+        if (source == SourceType.REBALANCE) {
+            content.push(source)
+        }
+        
+        if (reason) {
+            // Remove the full stop because it will be added later
+            if (reason.slice(-1) == ".") reason = reason.slice(0, -1)
+            content.push(reason)
+        }
 
-    if (signal) {
-        content.push("strategy: " + signal.strategyName)
-        content.push("signal price: " + format(signal.price))
-        content.push("score: ") + signal.score === "NA" ? "N/A" : signal.score
-        content.push("signal received: " + format(signal.timestamp))
-    } else if (tradeOpen) {
-        // This should only happen when we are re-balancing a LONG trade
-        content.push("strategy: " + tradeOpen.strategyName)
-    }
+        if (tradeOpen) {
+            if (tradeOpen.cost) content.push(format(tradeOpen.cost))
 
-    if (tradeOpen) {
-        content.push("quantity: " + format(tradeOpen.quantity))
-        content.push("cost: " + format(tradeOpen.cost))
-        content.push("borrow: " + format(tradeOpen.borrow))
-        content.push("wallet: " + format(tradeOpen.wallet))
-        content.push("type: " + format(tradeOpen.tradingType))
+            if (messageType == MessageType.SUCCESS && tradeOpen.priceBuy && tradeOpen.priceSell) {
+                const diff = tradeOpen.priceSell.minus(tradeOpen.priceBuy).dividedBy(tradeOpen.priceBuy).multipliedBy(100)
+                content.push(diff.toFixed(3) + "%")
 
-        content.push("trade buy price: " + format(tradeOpen.priceBuy))
-        content.push("buy executed: " + format(tradeOpen.timeBuy))
-        content.push("trade sell price: " + format(tradeOpen.priceSell))
-        content.push("sell executed: " + format(tradeOpen.timeSell))
-    }
+                let dur = tradeOpen.timeSell!.getTime() - tradeOpen.timeBuy!.getTime()
+                if (tradeOpen.positionType == PositionType.SHORT) dur = 0 - dur
+                dur /= 1000
+                if (dur <= 60) {
+                    content.push(dur.toFixed(1) + " sec")
+                } else {
+                    dur /= 60
+                    if (dur <= 60) {
+                        content.push(dur.toFixed(1) + " min")
+                    } else {
+                        dur /= 60
+                        content.push(dur.toFixed(1) + " hr")
+                    }
+                }
+            }
 
-    if (reason) {
+            content.push(tradeOpen.strategyName)
+        } else if (signal) {
+            content.push(signal.strategyName)
+        }
+
+        contentRaw += " " + content.join(". ") + "."
+    } else {
         content.push("")
-        content.push(reason)
+
+        if (source) {
+            content.push("source: " + source)
+        }
+
+        if (signal) {
+            content.push("strategy: " + signal.strategyName)
+            content.push("signal price: " + format(signal.price))
+            content.push("score: ") + signal.score === "NA" ? "N/A" : signal.score
+            content.push("signal received: " + format(signal.timestamp))
+        } else if (tradeOpen) {
+            // This should only happen when we are re-balancing a LONG trade
+            content.push("strategy: " + tradeOpen.strategyName)
+        }
+
+        if (tradeOpen) {
+            content.push("quantity: " + format(tradeOpen.quantity))
+            content.push("cost: " + format(tradeOpen.cost))
+            content.push("borrow: " + format(tradeOpen.borrow))
+            content.push("wallet: " + format(tradeOpen.wallet))
+            content.push("type: " + format(tradeOpen.tradingType))
+
+            content.push("trade buy price: " + format(tradeOpen.priceBuy))
+            content.push("buy executed: " + format(tradeOpen.timeBuy))
+            content.push("trade sell price: " + format(tradeOpen.priceSell))
+            content.push("sell executed: " + format(tradeOpen.timeSell))
+        }
+
+        if (reason) {
+            content.push("")
+            content.push(reason)
+        }
+
+        contentRaw += content.join("\n")
     }
 
     return {
         messageType: messageType,
         subject: base,
-        content: base + content.join("\n"),
+        content: contentRaw,
         contentHtml: baseHtml + content.join("<br/>"),
     }
 }
 
-function format(value: BigNumber | Date | String | undefined): String {
+function format(value: BigNumber | Date | string | undefined): string {
     if (value == undefined) return ""
 
     if (value instanceof BigNumber) {
@@ -110,10 +158,6 @@ function format(value: BigNumber | Date | String | undefined): String {
 
     if (value instanceof Date) {
         return value.toISOString()
-    }
-
-    if (value instanceof String) {
-        return value
     }
 
     return String(value)

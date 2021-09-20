@@ -1,4 +1,4 @@
-## [1.2.0] (2021-09-19)
+## [1.2.0] (2021-09-20)
 
 ### Bug Fixes
 
@@ -24,6 +24,7 @@
 * **trader:** web UI facelift.
 * **trader:** added Sell Largest PnL funding option.
 * **trader:** added option to exclude losing trades from auto-balancing.
+* **trader:** added option to shorten notification messages.
 
 ## [1.1.0] (2021-08-09)
 

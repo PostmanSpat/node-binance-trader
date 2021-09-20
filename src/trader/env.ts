@@ -38,6 +38,7 @@ export function getDefault(): Readonly<any> {
         NOTIFIER_TELEGRAM_RECEIVER_ID: str({ default: "", desc: "Unique identifier for the target chat (as a number) or username of the target channel (in the format @channelusername)" }),
         
         NOTIFIER_LEVEL: str({ default: "info", choices: [ "info", "success", "warn", "error" ], desc: "Minimum level of notifications that will be sent"}),
+        IS_NOTIFIER_SHORT: bool({ default: false, desc: "Selects if the shorter version of the notification messages should be used" }),
 
         // Additional configuration options for trader features
         IS_BUY_QTY_FRACTION: bool({ default: false, desc: "Uses the 'Quantity to spend per trade' from the NBT Hub as a fraction of your wallet balance (e.g. 0.1 is 10%)" }),

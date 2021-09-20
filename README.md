@@ -120,6 +120,8 @@ The new features that I have added to the trader include:
 * **CONFIG: Notification Level Filter**
   * If you are happy to monitor the status of your trades in the Web Diagnostics but want to receive notifications when something goes wrong, you can now change the Notifier Level in the settings to limit the types of messages that are sent by the notification system.
   * The default is 'info' which allows all, but can be changed to 'success', 'warn', or 'error'. 
+* **CONFIG: Short Notification Messages**
+  * Enabling this setting will reduce the notification messages to only show basic details about the trade or signal, such as the cost, percentage change in price, and duration. This can be useful when using Telegram, as the key information will be visible in the message popup.
 * ***CONFIG:* Additional Logging**
   * By default the trader will only log 'info', 'warn', and 'error' messages. But there is an internal setting to change the logging level to 'debug' if you want more insight into what decisions the trader is making. You can even drop the level to 'silly' to see all incoming JSON messages and SQL statements.
   * If you have the database backup enabled then it will keep the logs in the database, but only the original 'info', 'warn', and 'error' messages will be saved to minimise space. If you enable the other levels they will only be held in memory while the trader is running, and can be viewed via the web diagnostics interface.
