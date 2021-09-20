@@ -58,16 +58,12 @@ export function getNotifierMessage(
     const colour = messageType == MessageType.SUCCESS ? "#008000" : "#ff0000"
     const baseHtml = messageType == MessageType.INFO 
         ? `<b>${action}</b>`
-        : `<font color=${colour}><b>${messageType}</b></font> ${action}`
+        : `<font color=${colour}><b>${messageType}</b></font> ${action} `
     
     const content: string[] = []
-    let contentRaw = base
+    let contentRaw = ""
 
     if (env().IS_NOTIFIER_SHORT) {
-        if (source == SourceType.REBALANCE) {
-            content.push(source)
-        }
-        
         if (reason) {
             // Remove the full stop because it will be added later
             if (reason.slice(-1) == ".") reason = reason.slice(0, -1)
@@ -75,13 +71,15 @@ export function getNotifierMessage(
         }
 
         if (tradeOpen) {
-            if (tradeOpen.cost) content.push(format(tradeOpen.cost))
-
             if (messageType == MessageType.SUCCESS && tradeOpen.priceBuy && tradeOpen.priceSell) {
                 const diff = tradeOpen.priceSell.minus(tradeOpen.priceBuy).dividedBy(tradeOpen.priceBuy).multipliedBy(100)
                 content.push(diff.toFixed(3) + "%")
+            }
 
-                let dur = tradeOpen.timeSell!.getTime() - tradeOpen.timeBuy!.getTime()
+            if (tradeOpen.cost) content.push(format(tradeOpen.cost))
+
+            if (messageType == MessageType.SUCCESS && tradeOpen.timeBuy && tradeOpen.timeSell) {
+                let dur = tradeOpen.timeSell.getTime() - tradeOpen.timeBuy.getTime()
                 if (tradeOpen.positionType == PositionType.SHORT) dur = 0 - dur
                 dur /= 1000
                 if (dur <= 60) {
@@ -96,13 +94,21 @@ export function getNotifierMessage(
                     }
                 }
             }
-
-            content.push(tradeOpen.strategyName)
-        } else if (signal) {
-            content.push(signal.strategyName)
         }
 
-        contentRaw += " " + content.join(". ") + "."
+        if (source == SourceType.REBALANCE) {
+            content.push(source)
+        }
+
+        if (content.length) content.push("")
+
+        contentRaw = `${messageType} ${content.join(". ")}${action}`.trim()
+        
+        if (tradeOpen) {
+            contentRaw += ` ${tradeOpen.strategyName}.`
+        } else if (signal) {
+            contentRaw += ` ${signal.strategyName}.`
+        }
     } else {
         content.push("")
 
@@ -138,7 +144,7 @@ export function getNotifierMessage(
             content.push(reason)
         }
 
-        contentRaw += content.join("\n")
+        contentRaw = base + " " + content.join("\n")
     }
 
     return {
