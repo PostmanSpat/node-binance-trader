@@ -1193,12 +1193,14 @@ async function executeTradeAction(
     // null is returned for virtual actions, so simulate a successful result object
     if (result == null && (action == ActionType.BUY || action == ActionType.SELL)) {
         // Get the current ticker price
-        const ticker = await fetchTicker(tradingMetaData.markets[tradeOpen.symbol]).catch((reason) => {
+        let price = await fetchTicker(tradingMetaData.markets[tradeOpen.symbol]).then(result => {
+            return action == ActionType.BUY ? result.ask : result.bid
+        }).catch((reason) => {
             logger.silly("executeTradeAction->fetchTicker: " + reason)
-            return Promise.reject(reason)
+            // Not going to stop, just use the previous price next
+            return 0
         })
-        let price = action == ActionType.BUY ? ticker.ask : ticker.bid
-        // Unlikely, but price might be 0 if there are no orders
+        // Unlikely, but price might be 0 if there are no orders or it failed to get the price
         if (!price) price = (action == ActionType.BUY ? tradeOpen.priceBuy! : tradeOpen.priceSell!).toNumber()
 
         result = {
@@ -1243,6 +1245,13 @@ async function executeTradeAction(
                                 // Update the price for better accuracy
                                 tradeOpen.priceBuy = new BigNumber(result.price)
                                 tradeOpen.timeUpdated = timestamp
+
+                                // Copy the price back to the original trade
+                                if (source == SourceType.REBALANCE) {
+                                    for (const sourceTrade of tradingMetaData.tradesOpen.filter(trade => trade.id == tradeOpen.id)) {
+                                        sourceTrade.priceBuy = tradeOpen.priceBuy
+                                    }
+                                }
                             }
                             break
                         case ActionType.SELL:
@@ -1251,8 +1260,27 @@ async function executeTradeAction(
                                 // Update the price for better accuracy
                                 tradeOpen.priceSell = new BigNumber(result.price)
                                 tradeOpen.timeUpdated = timestamp
+
+                                // Copy the price back to the original trade
+                                if (source == SourceType.REBALANCE) {
+                                    for (const sourceTrade of tradingMetaData.tradesOpen.filter(trade => trade.id == tradeOpen.id)) {
+                                        sourceTrade.priceSell = tradeOpen.priceBuy
+                                    }
+                                }
                             }
                             break
+                    }
+
+                    // Recalculate the cost for the original trade
+                    if (source == SourceType.REBALANCE && (action == ActionType.BUY || action == ActionType.SELL)) {
+                        for (const sourceTrade of tradingMetaData.tradesOpen.filter(trade => trade.id == tradeOpen.id)) {
+                            const sourceCost = sourceTrade.quantity.multipliedBy(result.price)
+                            if (!sourceTrade.cost!.isEqualTo(sourceCost)) {
+                                logger.debug(`${getLogName(sourceTrade)} original trade cost has been updated from ${sourceTrade.cost!.toFixed()} to ${sourceCost.toFixed()}.`)
+                                sourceTrade.cost = sourceCost
+                                sourceTrade.timeUpdated = timestamp
+                            }
+                        }
                     }
                 }
                 if (result.cost && !tradeOpen.cost!.isEqualTo(result.cost)) {
@@ -1707,8 +1735,11 @@ function rebalanceTrade(tradeOpen: TradeOpen, cost: BigNumber, wallet: WalletDat
     const market = tradingMetaData.markets[tradeOpen.symbol]
 
     // Have to set a sell price so that it can update balances
-    // The sell price may have updated from a previous successful rebalance, so we'll use the latest for calculating
-    // TODO: It would be nice to use current market price instead of cost calculated from opening price, but querying ticker data will slow down the process
+    if (hasCurrentPrices()) {
+        // Querying ticker data again will slow down the process, so we'll only use it if we've got it
+        tradeOpen.priceSell = tradingMetaData.prices[tradeOpen.symbol]
+    }
+    // The sell price may have updated from a previous successful rebalance, so we'll keep that for calculating
     if (!tradeOpen.priceSell) tradeOpen.priceSell = tradeOpen.priceBuy
 
     // Calculate the difference in cost and quantity
@@ -1993,7 +2024,7 @@ async function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<
                                         if (diff.isGreaterThanOrEqualTo(0)) {
                                             profitTrades.push(trade)
                                         } else {
-                                            logger.debug(`${getLogName(trade)} price has changed from ${trade.priceBuy!} to ${tradingMetaData.prices[trade.symbol]}, loss would be ${diff} with fees, so it will not be used for rebalancing.`)
+                                            logger.debug(`${getLogName(trade)} price has changed from ${trade.priceBuy!.toFixed()} to ${tradingMetaData.prices[trade.symbol].toFixed()}, loss would be ${diff.toFixed()} with fees, so it will not be used for rebalancing.`)
                                             wallet.total = wallet.total.minus(trade.cost!)
                                         }
                                     }
@@ -2043,7 +2074,7 @@ async function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<
                                                     wallet.total = wallet.total.plus(trade.cost!)
                                                 } else {
                                                     // This trade is below the average, so it won't get rebalanced
-                                                    logger.debug(`${getLogName(trade)} cost of ${trade.cost?.toFixed()} is below the average of ${wallet.potential} so won't be rebalanced.`)
+                                                    logger.debug(`${getLogName(trade)} cost of ${trade.cost?.toFixed()} is below the average of ${wallet.potential.toFixed()} so won't be rebalanced.`)
                                                     // The list of trades is different, so we'll need to loop again and calculate a new average
                                                     smaller = true
                                                 }
@@ -2062,7 +2093,7 @@ async function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<
                                                 // Prices should already have been refreshed when the open signal was received
                                                 // The price difference won't be exactly right because we're not looking at the market ask price, but it is all relative
                                                 const diff = tradingMetaData.prices[trade.symbol].minus(trade.priceBuy!).dividedBy(trade.priceBuy!)
-                                                logger.debug(`${getLogName(trade)} price has changed from ${trade.priceBuy!} to ${tradingMetaData.prices[trade.symbol]} (${diff.multipliedBy(100).toFixed(3)}%).`)
+                                                logger.debug(`${getLogName(trade)} price has changed from ${trade.priceBuy!.toFixed()} to ${tradingMetaData.prices[trade.symbol].toFixed()} (${diff.multipliedBy(100).toFixed(3)}%).`)
                                                 if (best == null || diff.isGreaterThan(best)) {
                                                     // Replace the largest trade, the wallet potential will be recalculated later
                                                     largest = trade
@@ -2092,7 +2123,7 @@ async function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<
 
                                 // Check for the minimum cost here as we don't want to start rebalancing if we can't make the trade
                                 if (cost.isLessThan(getMinCost(tradingData.market))) {
-                                    const logMessage = `Failed to trade as rebalancing to free up ${cost.toFixed()} ${tradingData.market.quote} would be less than the minimum trade cost of ${getMinCost(tradingData.market)} ${tradingData.market.quote}.`
+                                    const logMessage = `Failed to trade as rebalancing to free up ${cost.toFixed()} ${tradingData.market.quote} would be less than the minimum trade cost of ${getMinCost(tradingData.market).toFixed()} ${tradingData.market.quote}.`
                                     logger.error(logMessage)
                                     return Promise.reject(logMessage)
                                 }
@@ -2124,7 +2155,7 @@ async function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<
 
                     // As cost probably changed, check for the minimum cost to see if we can make the trade
                     if (cost.isLessThan(getMinCost(tradingData.market))) {
-                        const logMessage = `Failed to trade as available ${use.type} funds of ${cost.toFixed()} ${tradingData.market.quote} would be less than the minimum trade cost of ${getMinCost(tradingData.market)} ${tradingData.market.quote}.`
+                        const logMessage = `Failed to trade as available ${use.type} funds of ${cost.toFixed()} ${tradingData.market.quote} would be less than the minimum trade cost of ${getMinCost(tradingData.market).toFixed()} ${tradingData.market.quote}.`
                         logger.error(logMessage)
                         return Promise.reject(logMessage)
                     }
@@ -2606,11 +2637,7 @@ async function refreshMarkets() {
 // This will update the prices dictionary in the tradingMetaData if more than 1 minute since previously loaded
 let pricesCached = 0
 async function refreshPrices() {
-    const elapsed = Date.now() - pricesCached
-    // Only load if prices haven't been cached yet, or it has been more than 1 minute
-    const reload = Object.keys(tradingMetaData.prices).length == 0 || elapsed >= 60 * 1000 || elapsed < 0
-    
-    if (reload) {
+    if (!hasCurrentPrices()) {
         tradingMetaData.prices = await loadPrices().catch((reason) => {
             logger.silly("refreshPrices->loadPrices: " + reason)
             return Promise.reject(reason)
@@ -2619,6 +2646,13 @@ async function refreshPrices() {
         // Remember last cached time
         pricesCached = Date.now()
     }
+}
+
+// Check if the current prices are cached within the past minute
+function hasCurrentPrices(): boolean {
+    const elapsed = Date.now() - pricesCached
+    // Prices are only valid for one minute
+    return Object.keys(tradingMetaData.prices).length > 0 && elapsed < 60 * 1000 && elapsed >= 0
 }
 
 // Loads the balances from Binance and checks whether you still have sufficient BNB funds to cover fees and interest
