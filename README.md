@@ -91,6 +91,8 @@ The new features that I have added to the trader include:
     * **/strategies?start=** - Specify a strategy ID to resume normal trading.
     * **/strategies?public** - List of all strategies broadcasting public signals since the trader started.
     * **/trades** - Current open trades list.
+    * **/trades?hodl=** - Specify a trade ID to HODL, this will only accept a close signal when the price will result in a profit.
+    * **/trades?release=** - Specify a trade ID to release the HODL status, this will accept the next close signal from the NBT Hub.
     * **/trades?stop=** - Specify a trade ID to stop trading, this will keep the trade open but ignore close signals from the NBT Hub.
     * **/trades?start=** - Specify a trade ID to resume trading, this will accept the next close signal from the NBT Hub.
     * **/trades?close=** - Specify a trade ID to attempt to close the trade on Binance. You may need to use this if the trader gets out of sync with the NBT Hub.
@@ -101,6 +103,8 @@ The new features that I have added to the trader include:
     * **/virtual?reset=true** - Clears and reloads the virtual balances and virtual PnL. You can also pass a number on the reset and it will change the default value for **Virtual Wallet Funds** (e.g. ?reset=100).
     * **/graph.html?summary=** - Specify coin and trading type to graph the last 7 days worth of transactions (e.g. ?summary=BTC:real).
   * You can also configure a **Web Password** in the environment variables to restrict access to these commands (e.g. http://localhost:8003/log?mypassword).
+* **HODL Open Trades**
+  * Using the feature in the **Web Diagnostics** above you can select individual trades to enable HODL (Hold On for Dear Life). Unlike a stopped trade, a HODL trade can still close automatically from a signal but only if the price will result in a profit. HODL can be set on individual trades without having to stop the strategy.
 * **Individual Tracking of Real / Virtual Trades**
   * In the original trader if you started a strategy in virtual trading and switched to real trading, or vice versa, it would attempt to close trades based on the current status of the strategy, rather than how the trade was originally opened. This means it could try to close a trade on Binance that was originally opened virtually, or never close the open trade on Binance because you've now switched the strategy to virtual. Now, if the trade opened on Binance it will close on Binance even if the strategy has been switched to virtual. If you don't want this to happen, make sure you close or stop the open trades before switching modes.
   * This is a useful way to soft close a strategy. Rather than manually closing the live trades yourself, you can switch the strategy to virtual and wait for the automatic close signals for any remaining open trades.

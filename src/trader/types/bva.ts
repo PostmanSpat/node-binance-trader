@@ -119,6 +119,7 @@ export interface TradeOpenJson {
 export class TradeOpen {
     id: string
     isStopped: boolean
+    isHodl: boolean // User can select to only sell this trade for profit
     positionType: PositionType
     tradingType?: TradingType // Comes from the strategy
     priceBuy?: BigNumber
@@ -138,6 +139,7 @@ export class TradeOpen {
     constructor(tradeOpenJson: TradeOpenJson) {
         this.id = tradeOpenJson.id
         this.isStopped = tradeOpenJson.stopped != null && tradeOpenJson.stopped
+        this.isHodl = false
         this.positionType = tradeOpenJson.type as PositionType
         this.priceBuy = tradeOpenJson.buy_price
             ? new BigNumber(tradeOpenJson.buy_price)

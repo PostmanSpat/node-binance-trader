@@ -25,6 +25,7 @@
 * **trader:** added Sell Largest PnL funding option.
 * **trader:** added option to exclude losing trades from auto-balancing.
 * **trader:** added option to shorten notification messages.
+* **trader:** ability to HODL open trades.
 
 ## [1.1.0] (2021-08-09)
 

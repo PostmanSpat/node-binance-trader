@@ -527,8 +527,8 @@ async function compareStrategyTrades() {
         logger.info("Comparing open trades to source strategies...")
         // Only check the strategies that are still running normally
         for (let strategy of Object.values(tradingMetaData.strategies).filter(strategy => strategy.isActive && !strategy.isStopped)) {
-            // Find all trades for this strategy that are open
-            const userTrades = tradingMetaData.tradesOpen.filter(trade => trade.strategyId == strategy.id && !trade.isStopped)
+            // Find all trades for this strategy that are open but not stopped or hodling because they would likely be out of sync
+            const userTrades = tradingMetaData.tradesOpen.filter(trade => trade.strategyId == strategy.id && !trade.isStopped && !trade.isHodl)
             // Only compare if at least on trade is open
             if (userTrades.length) {
                 // Retrieve the strategy's open trades from the NBT Hub
@@ -701,6 +701,7 @@ function checkFailedCloseTrade(signal: Signal) {
         tradeOpen = {
             id: "F" + Date.now(), // Doesn't matter
             isStopped: true, // Say it was stopped so it moves to the next step below
+            isHodl: false,
             positionType: PositionType.LONG, // We need to know the position type to trigger the right signal back, but we don't know it anymore
             tradingType: strategy ? strategy.tradingType : TradingType.virtual, // Get it from the strategy if available, otherwise just guess
             quantity: strategy ? strategy.tradeAmount : new BigNumber(1), // Quantity is used in the response, but I don't think it makes a difference what it is
@@ -933,19 +934,26 @@ function checkTradingData(signal: Signal, source: SourceType): TradingData {
             // Check to satisfy the compiler, if no price it will fail later anyway
             if (signal.price) {
                 // Calculate whether this trade will make a profit or loss
-                const net = tradeOpen.positionType == PositionType.LONG ? signal.price.minus(tradeOpen.priceBuy!) : tradeOpen.priceSell!.minus(signal.price)
-                logger.debug(`Closing price difference for ${getLogName(tradeOpen)} trade is ${net.toFixed()}.`)
+                const percent = PositionType.LONG ? calculatePnL(tradeOpen.priceBuy!, signal.price) : calculatePnL(signal.price, tradeOpen.priceSell!)
+                logger.debug(`Closing ${percent.isLessThan(0) ? "loss" : "profit"} for ${getLogName(tradeOpen)} trade will be ${percent.toFixed(3)}% with fees.`)
 
                 // Check if strategy has hit the losing trade limit, and this an automatic trade signal
+                // Of if the user has decided to HODL the trade
                 // Strategy may be undefined if no longer followed, but then we should only get here for a manual close
-                if ((!strategy || strategy.isStopped) && source == SourceType.SIGNAL && signal.price) {
-                    if (net.isNegative()) {
-                        const logMessage = `Skipping signal as strategy for ${getLogName(signal)} has been stopped and this trade will make another loss, close it manually or wait for a better close signal.`
+                if ((!strategy || strategy.isStopped || tradeOpen.isHodl) && source == SourceType.SIGNAL && signal.price) {
+                    let reason = ""
+                    if (tradeOpen.isHodl) {
+                        reason = `${getLogName(tradeOpen)} trade is set to HODL`
+                    } else {
+                        reason = `strategy for ${getLogName(signal)} has been stopped`
+                    }
+                    if (percent.isLessThan(0)) {
+                        const logMessage = `Skipping signal as ${reason} and this trade will make another loss, close it manually or wait for a better close signal.`
                         logger.error(logMessage)
                         throw logMessage
                     } else {
                         // Winning trades are allowed through
-                        logger.warn(`Strategy for ${getLogName(signal)} has been stopped, but this should be a winning trade so it will execute.`)
+                        logger.warn(`The ${reason}, but this should be a winning trade so it will execute.`)
                     }
                 }
             }
@@ -1522,15 +1530,16 @@ export async function executeTradingTask(
     let change = undefined
     if (tradeOpen.priceBuy && tradeOpen.priceSell && (!signal || signal.entryType == EntryType.EXIT)) {
         // Regardless of whether this was SHORT or LONG, you should always buy low and sell high
+        // Need change without fees for the balance history later
         change = tradeOpen.quantity.multipliedBy(tradeOpen.priceSell).minus(tradeOpen.quantity.multipliedBy(tradeOpen.priceBuy))
-        const percent = tradeOpen.priceSell.minus(tradeOpen.priceBuy).dividedBy(tradeOpen.priceBuy).multipliedBy(100)
-        logger.debug(`Closing ${change.isNegative() ? "loss" : "profit"} for ${getLogName(tradeOpen)} trade is: ${change.toFixed()} ${market.quote} (${percent.toFixed(3)}%).`)
+        const percent = calculatePnL(tradeOpen.priceBuy, tradeOpen.priceSell)
+        logger.debug(`Closing ${change.isLessThan(0) ? "loss" : "profit"} for ${getLogName(tradeOpen)} trade was ${change.toFixed()} ${market.quote} (or ${percent.toFixed(3)}% with fees).`)
 
         const strategy = tradingMetaData.strategies[tradeOpen.strategyId]
         // Manually closing a trade or rebalancing should not affect the count of losses
         if (strategy && source == SourceType.SIGNAL && signal) {
-            // Check for losing trade, note this doesn't consider estimated fees
-            if (change.isLessThan(0)) {
+            // Check for losing trade with fees
+            if (percent.isLessThan(0)) {
                 // Losing trade, increase the count
                 strategy.lossTradeRun++
 
@@ -1925,6 +1934,15 @@ async function loadWalletBalances(tradingType: TradingType, market?: Market, quo
     return Promise.resolve(wallets)
 }
 
+// Calculates the profit and loss between two prices including fees, returns as a percentage
+export function calculatePnL(priceBuy: BigNumber, priceSell: BigNumber): BigNumber {
+    // Need to apply fees to both the buy and sell price to ensure overall profit or loss is calculated
+    const buyFee = 1 + (env().TAKER_FEE_PERCENT / 100)
+    const sellFee = 1 - (env().TAKER_FEE_PERCENT / 100)
+
+    return priceSell.multipliedBy(sellFee).minus(priceBuy.multipliedBy(buyFee)).dividedBy(priceBuy.multipliedBy(buyFee)).multipliedBy(100)
+}
+
 // Calculates the trade quantity, cost, and amount to borrow based on available funds and the configured funding model
 // This may initiate rebalancing trades to free up necessary funds
 async function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<WalletData>, preferred: WalletType[], primary: WalletType): Promise<{ quantity: BigNumber; cost: BigNumber; borrow: BigNumber; wallet: WalletType }> {
@@ -2000,31 +2018,37 @@ async function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<
 
                             // Calculate the potential for each wallet
                             for (let wallet of Object.values(wallets)) {
-                                // Deduct and remove any stopped trades as these cannot be rebalanced
+                                const excluded: TradeOpen[] = []
                                 for (const trade of wallet.trades) {
                                     if (trade.isStopped) {
+                                        // Exclude any stopped trades as these cannot be rebalanced
                                         logger.debug(`${getLogName(trade)} trade is stopped so will not be used for rebalancing.`)
-                                        wallet.total = wallet.total.minus(trade.cost!)
+                                        excluded.push(trade)
+                                    } else if (trade.isHodl && !env().IS_FUNDS_NO_LOSS) {
+                                        // If we're not going to check for profitable trades before rebalancing, then just have to assume HODL trades will lose
+                                        logger.debug(`${getLogName(trade)} trade is set to HODL so will not be used for rebalancing.`)
+                                        excluded.push(trade)
                                     }
                                 }
-                                wallet.trades = wallet.trades.filter(trade => !trade.isStopped)
+                                // Deduct excluded costs and remove trades from the wallet
+                                for (const trade of excluded) {
+                                    wallet.total = wallet.total.minus(trade.cost!)
+                                }
+                                wallet.trades = wallet.trades.filter(trade => !excluded.includes(trade))
                                 
                                 if (env().IS_FUNDS_NO_LOSS) {
                                     // Find only the trades that are expected to not make a loss if we sell them now
                                     const profitTrades: TradeOpen[] = []
-                                    // Need to apply fees to both the buy and sell price to ensure overall profit or loss is calculated
-                                    const buyFee = 1 + (env().TAKER_FEE_PERCENT / 100)
-                                    const sellFee = 1 - (env().TAKER_FEE_PERCENT / 100)
                                     for (const trade of wallet.trades) {
                                         // Calculate the difference in price since opening the LONG trade
                                         // Prices should already have been refreshed when the open signal was received
                                         // The price difference won't be exactly right because we're not looking at the market ask price, but hopefully it is close enough
-                                        const diff = tradingMetaData.prices[trade.symbol].multipliedBy(sellFee).minus(trade.priceBuy!.multipliedBy(buyFee))
+                                        const percent = calculatePnL(trade.priceBuy!, tradingMetaData.prices[trade.symbol])
                                         // Do not sell for a loss, but can break even
-                                        if (diff.isGreaterThanOrEqualTo(0)) {
+                                        if (percent.isGreaterThanOrEqualTo(0)) {
                                             profitTrades.push(trade)
                                         } else {
-                                            logger.debug(`${getLogName(trade)} price has changed from ${trade.priceBuy!.toFixed()} to ${tradingMetaData.prices[trade.symbol].toFixed()}, loss would be ${diff.toFixed()} with fees, so it will not be used for rebalancing.`)
+                                            logger.debug(`${getLogName(trade)} price has changed from ${trade.priceBuy!.toFixed()} to ${tradingMetaData.prices[trade.symbol].toFixed()}, loss would be ${percent.toFixed(3)}% with fees, so it will not be used for rebalancing.`)
                                             wallet.total = wallet.total.minus(trade.cost!)
                                         }
                                     }
@@ -2092,12 +2116,12 @@ async function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<
                                                 // Calculate the relative change in price since opening the LONG trade
                                                 // Prices should already have been refreshed when the open signal was received
                                                 // The price difference won't be exactly right because we're not looking at the market ask price, but it is all relative
-                                                const diff = tradingMetaData.prices[trade.symbol].minus(trade.priceBuy!).dividedBy(trade.priceBuy!)
-                                                logger.debug(`${getLogName(trade)} price has changed from ${trade.priceBuy!.toFixed()} to ${tradingMetaData.prices[trade.symbol].toFixed()} (${diff.multipliedBy(100).toFixed(3)}%).`)
-                                                if (best == null || diff.isGreaterThan(best)) {
+                                                const percent = calculatePnL(trade.priceBuy!, tradingMetaData.prices[trade.symbol])
+                                                logger.debug(`${getLogName(trade)} price has changed from ${trade.priceBuy!.toFixed()} to ${tradingMetaData.prices[trade.symbol].toFixed()} (${percent.toFixed(3)}% with fees).`)
+                                                if (best == null || percent.isGreaterThan(best)) {
                                                     // Replace the largest trade, the wallet potential will be recalculated later
                                                     largest = trade
-                                                    best = diff
+                                                    best = percent
                                                 }
                                             }
                                         }
@@ -2231,6 +2255,7 @@ async function createTradeOpen(tradingData: TradingData): Promise<TradeOpen> {
     return Promise.resolve({
         id: newTradeID(), // Generate a temporary internal ID, because we only get one from the NBT Hub when reloading the payload
         isStopped: false,
+        isHodl: false,
         positionType: tradingData.signal.positionType!,
         tradingType: tradingData.strategy.tradingType,
         priceBuy: tradingData.signal.positionType == PositionType.LONG ? tradingData.signal.price : undefined,
@@ -2527,6 +2552,21 @@ export function setTradeStopped(tradeId: string, stop: boolean): string | undefi
     }
 }
 
+// Used by the web server to allow users to enable or disable HODL on a trade
+export function setTradeHODL(tradeId: string, hodl: boolean): string | undefined {
+    const tradeOpen = tradingMetaData.tradesOpen.find(trade => trade.id == tradeId)
+    if (tradeOpen) {
+        if (hodl) {
+            logger.info(`HODL ${getLogName(tradeOpen)} trade.`)
+        } else {
+            logger.info(`Release HODL on ${getLogName(tradeOpen)} trade.`)
+        }
+        tradeOpen.isHodl = hodl
+        saveState("tradesOpen")
+        return getLogName(tradeOpen)
+    }
+}
+
 // Used by the web server to allow users to stop and start strategies manually
 export function setStrategyStopped(stratId: string, stop: boolean): string | undefined {
     const strategy = tradingMetaData.strategies[stratId]
@@ -2543,6 +2583,7 @@ export function setStrategyStopped(stratId: string, stop: boolean): string | und
 }
 
 // Gets a count of the open active trades for a given position type, and also within the same real/virtual trading
+// Doesn't count stopped trades, but will still count HODL trades
 function getOpenTradeCount(positionType: PositionType, tradingType: TradingType) {
     return tradingMetaData.tradesOpen.filter(
         (tradeOpen) =>

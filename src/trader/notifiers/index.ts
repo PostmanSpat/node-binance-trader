@@ -1,8 +1,7 @@
 import BigNumber from "bignumber.js"
-import { basename } from "path/posix"
 import logger from "../../logger"
-import { trade } from "../trader"
-import { EntryType, PositionType, Signal, TradeOpen } from "../types/bva"
+import { calculatePnL } from "../trader"
+import { PositionType, Signal, TradeOpen } from "../types/bva"
 import { MessageType, Notifier, NotifierMessage } from "../types/notifier"
 import { SourceType } from "../types/trader"
 import env from "./../env"
@@ -72,8 +71,8 @@ export function getNotifierMessage(
 
         if (tradeOpen) {
             if (messageType == MessageType.SUCCESS && tradeOpen.priceBuy && tradeOpen.priceSell) {
-                const diff = tradeOpen.priceSell.minus(tradeOpen.priceBuy).dividedBy(tradeOpen.priceBuy).multipliedBy(100)
-                content.push(diff.toFixed(3) + "%")
+                const percent = calculatePnL(tradeOpen.priceBuy, tradeOpen.priceSell)
+                content.push(percent.toFixed(3) + "%")
             }
 
             if (tradeOpen.cost) content.push(format(tradeOpen.cost))

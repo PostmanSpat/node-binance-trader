@@ -3,7 +3,7 @@ import express from "express"
 
 import logger, { loggerOutput } from "../logger"
 import env from "./env"
-import { closeTrade, deleteBalanceHistory, deleteTrade, resetVirtualBalances, setStrategyStopped, setTradeStopped, setVirtualWalletFunds, topUpBNBFloat, tradingMetaData} from "./trader"
+import { closeTrade, deleteBalanceHistory, deleteTrade, resetVirtualBalances, setStrategyStopped, setTradeHODL, setTradeStopped, setVirtualWalletFunds, topUpBNBFloat, tradingMetaData} from "./trader"
 import { Dictionary } from "ccxt"
 import { ActionType, BalanceHistory, SourceType, Transaction, WalletType } from "./types/trader"
 import BigNumber from "bignumber.js"
@@ -31,7 +31,23 @@ export default function startWebserver(): http.Server {
                 const tradeId = req.query.start.toString()
                 const tradeName = setTradeStopped(tradeId, false)
                 if (tradeName) {
-                    res.send(`${tradeName} will continue to trade.`)
+                    res.send(`${tradeName} is no longer stopped and will continue to trade normally.`)
+                } else {
+                    res.send(`No trade was found with the ID of '${tradeId}'.`)
+                }
+            } else if (req.query.hodl) {
+                const tradeId = req.query.hodl.toString()
+                const tradeName = setTradeHODL(tradeId, true)
+                if (tradeName) {
+                    res.send(`${tradeName} will only close on the next profitable signal.`)
+                } else {
+                    res.send(`No trade was found with the ID of '${tradeId}'.`)
+                }
+            } else if (req.query.release) {
+                const tradeId = req.query.release.toString()
+                const tradeName = setTradeHODL(tradeId, false)
+                if (tradeName) {
+                    res.send(`${tradeName} is no longer set to HODL and will continue to trade normally.`)
                 } else {
                     res.send(`No trade was found with the ID of '${tradeId}'.`)
                 }
@@ -393,6 +409,12 @@ function makeCommands(page: Pages, record: any) : string {
             switch (page) {
                 case Pages.TRADES:
                     const tradeOpen = record as TradeOpen
+                    if (!tradeOpen.isHodl) {
+                        commands += makeButton("HODL", `Are you sure you want to Hold On for Dear Life to trade ${tradeOpen.id} until a profitable close signal?`, `${root}hodl=${tradeOpen.id}`)
+                    } else {
+                        commands += makeButton("Resume", `Are you sure you want to resume trade ${tradeOpen.id}?`, `${root}release=${tradeOpen.id}`)
+                    }
+                    commands += " "
                     if (!tradeOpen.isStopped) {
                         commands += makeButton("Stop", `Are you sure you want to stop trade ${tradeOpen.id}?`, `${root}stop=${tradeOpen.id}`)
                     } else {
