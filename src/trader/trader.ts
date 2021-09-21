@@ -1253,13 +1253,6 @@ async function executeTradeAction(
                                 // Update the price for better accuracy
                                 tradeOpen.priceBuy = new BigNumber(result.price)
                                 tradeOpen.timeUpdated = timestamp
-
-                                // Copy the price back to the original trade
-                                if (source == SourceType.REBALANCE) {
-                                    for (const sourceTrade of tradingMetaData.tradesOpen.filter(trade => trade.id == tradeOpen.id)) {
-                                        sourceTrade.priceBuy = tradeOpen.priceBuy
-                                    }
-                                }
                             }
                             break
                         case ActionType.SELL:
@@ -1269,26 +1262,19 @@ async function executeTradeAction(
                                 tradeOpen.priceSell = new BigNumber(result.price)
                                 tradeOpen.timeUpdated = timestamp
 
-                                // Copy the price back to the original trade
+                                // Copy the sell price and cost back to the original trade for auto balancing
                                 if (source == SourceType.REBALANCE) {
+                                    // Looping because it is easier, but there should only ever be one match
                                     for (const sourceTrade of tradingMetaData.tradesOpen.filter(trade => trade.id == tradeOpen.id)) {
-                                        sourceTrade.priceSell = tradeOpen.priceBuy
+                                        const sourceCost = sourceTrade.quantity.multipliedBy(result.price)
+                                        logger.debug(`${getLogName(sourceTrade)} original trade cost has been updated from ${sourceTrade.cost!.toFixed()} to ${sourceCost.toFixed()}.`)
+                                        sourceTrade.priceSell = tradeOpen.priceSell
+                                        sourceTrade.cost = sourceCost
+                                        sourceTrade.timeUpdated = timestamp
                                     }
                                 }
                             }
                             break
-                    }
-
-                    // Recalculate the cost for the original trade
-                    if (source == SourceType.REBALANCE && (action == ActionType.BUY || action == ActionType.SELL)) {
-                        for (const sourceTrade of tradingMetaData.tradesOpen.filter(trade => trade.id == tradeOpen.id)) {
-                            const sourceCost = sourceTrade.quantity.multipliedBy(result.price)
-                            if (!sourceTrade.cost!.isEqualTo(sourceCost)) {
-                                logger.debug(`${getLogName(sourceTrade)} original trade cost has been updated from ${sourceTrade.cost!.toFixed()} to ${sourceCost.toFixed()}.`)
-                                sourceTrade.cost = sourceCost
-                                sourceTrade.timeUpdated = timestamp
-                            }
-                        }
                     }
                 }
                 if (result.cost && !tradeOpen.cost!.isEqualTo(result.cost)) {
@@ -2708,8 +2694,8 @@ async function checkBNBThreshold(wallet: WalletType) {
         const balance = (await loadWalletBalances(TradingType.real, undefined, "BNB", wallet))[wallet]
         logger.debug(`${balance.free} BNB free in ${wallet}.`)
         if (balance.free.isLessThanOrEqualTo(env().BNB_FREE_THRESHOLD)) {
-            // Check if the low balance hasn't already been reported
-            if (BNBState[wallet] == "ok" || (BNBState[wallet] == "low" && balance.free.isLessThanOrEqualTo(0))) {
+            // Check if the low balance hasn't already been reported, but report again if it gets below half the threshold
+            if (BNBState[wallet] == "ok" || (BNBState[wallet] == "high" && balance.free.isLessThanOrEqualTo(env().BNB_FREE_THRESHOLD / 2)) || (BNBState[wallet] == "low" && balance.free.isLessThanOrEqualTo(0))) {
                 // Log the low balance warning or error for empty balance
                 let notifyLevel = MessageType.WARN
                 let logMessage = `Your ${wallet} wallet only has ${balance.free} BNB free. You may need to top it up.`
@@ -2719,7 +2705,7 @@ async function checkBNBThreshold(wallet: WalletType) {
                     logMessage = `Your ${wallet} wallet has no free BNB. You will need to top it up now.`
                     logger.error(logMessage)
                 } else {
-                    BNBState[wallet] = "low"
+                    BNBState[wallet] = balance.free.isLessThanOrEqualTo(env().BNB_FREE_THRESHOLD / 2) ? "low" : "high"
                     logger.warn(logMessage)
                 }
 
