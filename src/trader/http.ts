@@ -23,49 +23,49 @@ export default function startWebserver(): http.Server {
                 const tradeId = req.query.stop.toString()
                 const tradeName = setTradeStopped(tradeId, true)
                 if (tradeName) {
-                    res.send(`${tradeName} has been stopped.`)
+                    success(res, `${tradeName} has been stopped.`)
                 } else {
-                    res.send(`No trade was found with the ID of '${tradeId}'.`)
+                    fail(res, `No trade was found with the ID of '${tradeId}'.`)
                 }
             } else if (req.query.start) {
                 const tradeId = req.query.start.toString()
                 const tradeName = setTradeStopped(tradeId, false)
                 if (tradeName) {
-                    res.send(`${tradeName} is no longer stopped and will continue to trade normally.`)
+                    success(res, `${tradeName} is no longer stopped and will continue to trade normally.`)
                 } else {
-                    res.send(`No trade was found with the ID of '${tradeId}'.`)
+                    fail(res, `No trade was found with the ID of '${tradeId}'.`)
                 }
             } else if (req.query.hodl) {
                 const tradeId = req.query.hodl.toString()
                 const tradeName = setTradeHODL(tradeId, true)
                 if (tradeName) {
-                    res.send(`${tradeName} will only close on the next profitable signal.`)
+                    success(res, `${tradeName} will only close on the next profitable signal.`)
                 } else {
-                    res.send(`No trade was found with the ID of '${tradeId}'.`)
+                    fail(res, `No trade was found with the ID of '${tradeId}'.`)
                 }
             } else if (req.query.release) {
                 const tradeId = req.query.release.toString()
                 const tradeName = setTradeHODL(tradeId, false)
                 if (tradeName) {
-                    res.send(`${tradeName} is no longer set to HODL and will continue to trade normally.`)
+                    success(res, `${tradeName} is no longer set to HODL and will continue to trade normally.`)
                 } else {
-                    res.send(`No trade was found with the ID of '${tradeId}'.`)
+                    fail(res, `No trade was found with the ID of '${tradeId}'.`)
                 }
             } else if (req.query.close) {
                 const tradeId = req.query.close.toString()
                 const tradeName = closeTrade(tradeId)
                 if (tradeName) {
-                    res.send(`A close request has been sent for ${tradeName}. Wait a few seconds before checking the logs.`)
+                    success(res, `A close request has been sent for ${tradeName}. Wait a few seconds before checking the logs.`)
                 } else {
-                    res.send(`No trade was found with the ID of '${tradeId}'.`)
+                    fail(res, `No trade was found with the ID of '${tradeId}'.`)
                 }
             } else if (req.query.delete) {
                 const tradeId = req.query.delete.toString()
                 const tradeName = deleteTrade(tradeId)
                 if (tradeName) {
-                    res.send(`${tradeName} has been deleted.`)
+                    success(res, `${tradeName} has been deleted.`)
                 } else {
-                    res.send(`No trade was found with the ID of '${tradeId}'.`)
+                    fail(res, `No trade was found with the ID of '${tradeId}'.`)
                 }
             } else {
                 res.send(formatHTMLTable(Pages.TRADES, tradingMetaData.tradesOpen))
@@ -79,17 +79,17 @@ export default function startWebserver(): http.Server {
                 const stratId = req.query.stop.toString()
                 const stratName = setStrategyStopped(stratId, true)
                 if (stratName) {
-                    res.send(`${stratName} has been stopped.`)
+                    success(res, `${stratName} has been stopped.`)
                 } else {
-                    res.send(`No strategy was found with the ID of '${stratId}'.`)
+                    fail(res, `No strategy was found with the ID of '${stratId}'.`)
                 }
             } else if (req.query.start) {
                 const stratId = req.query.start.toString()
                 const stratName = setStrategyStopped(stratId, false)
                 if (stratName) {
-                    res.send(`${stratName} will continue to trade.`)
+                    success(res, `${stratName} will continue to trade.`)
                 } else {
-                    res.send(`No strategy was found with the ID of '${stratId}'.`)
+                    fail(res, `No strategy was found with the ID of '${stratId}'.`)
                 }
             } else if ("public" in req.query) {
                 res.send(formatHTMLTable(Pages.STRATEGIES, Object.values(tradingMetaData.publicStrategies)))
@@ -106,11 +106,11 @@ export default function startWebserver(): http.Server {
                 if (value.isGreaterThan(0)) {
                     setVirtualWalletFunds(value)
                 } else if (req.query.reset.toString().toLowerCase() != "true") {
-                    res.send("Invalid reset parameter.")
+                    fail(res, "Invalid reset parameter.")
                     return
                 }
                 resetVirtualBalances()
-                res.send("Virtual balances have been reset.")
+                success(res, "Virtual balances have been reset.")
             } else {
                 res.send(formatHTML(Pages.VIRTUAL, tradingMetaData.virtualBalances))
             }
@@ -157,17 +157,17 @@ export default function startWebserver(): http.Server {
                     for (let tradingType of tradingTypes) {
                         result += `${asset} ${tradingType} balance history has been reset.<br>`
                     }
-                    res.send(result)
+                    success(res, result)
                 } else {
-                    res.send(`No balance history found for ${asset}.`)
+                    fail(res, `No balance history found for ${asset}.`)
                 }
             } else if (req.query.topup) {
                 const parts = req.query.topup.toString().split(":")
                 const asset = parts[0].toUpperCase()
                 topUpBNBFloat(parts[1] as WalletType, asset).then((result) => {
-                    res.send(result)
+                    success(res, result)
                 }).catch(reason => {
-                    res.send(reason)
+                    fail(res, reason)
                 })
             } else {
                 const pnl: Dictionary<Dictionary<{}>> = {}
@@ -194,6 +194,14 @@ export default function startWebserver(): http.Server {
     return webserver.listen(env().TRADER_PORT, () =>
         logger.info(`Webserver started on port ${env().TRADER_PORT}.`)
     )
+}
+
+function success(res: any, message: string) {
+    res.send(`<font color="green">${message}</font>`)
+}
+
+function fail(res: any, message: string) {
+    res.send(`<font color="red">${message}</font>`)
 }
 
 function authenticate(req: any, res: any): boolean {
