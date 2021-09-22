@@ -63,6 +63,8 @@ export function getNotifierMessage(
     let contentRaw = ""
 
     if (env().IS_NOTIFIER_SHORT) {
+        contentRaw = messageType
+
         if (reason) {
             // Remove the full stop because it will be added later
             if (reason.slice(-1) == ".") reason = reason.slice(0, -1)
@@ -73,6 +75,12 @@ export function getNotifierMessage(
             if (messageType == MessageType.SUCCESS && tradeOpen.priceBuy && tradeOpen.priceSell) {
                 const percent = calculatePnL(tradeOpen.priceBuy, tradeOpen.priceSell)
                 content.push(percent.toFixed(3) + "%")
+
+                if (percent.isLessThan(0)) {
+                    contentRaw = "LOSS!"
+                } else {
+                    contentRaw = "PROFIT!"
+                }
             }
 
             if (tradeOpen.cost) content.push(format(tradeOpen.cost))
@@ -101,7 +109,7 @@ export function getNotifierMessage(
 
         if (content.length) content.push("")
 
-        contentRaw = `${messageType} ${content.join(". ")}${action}`.trim()
+        contentRaw = `${contentRaw} ${content.join(". ")}${action}`.trim()
         
         if (tradeOpen) {
             contentRaw += ` ${tradeOpen.strategyName}.`
