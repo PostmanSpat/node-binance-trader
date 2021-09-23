@@ -2014,6 +2014,10 @@ async function calculateTradeSize(tradingData: TradingData, wallets: Dictionary<
                                         // If we're not going to check for profitable trades before rebalancing, then just have to assume HODL trades will lose
                                         logger.debug(`${getLogName(trade)} trade is set to HODL so will not be used for rebalancing.`)
                                         excluded.push(trade)
+                                    } else if (trade.quantity.isLessThan(tradingMetaData.markets[trade.symbol].limits.amount.min*2) || trade.cost!.isLessThan(getMinCost(tradingMetaData.markets[trade.symbol]).multipliedBy(2))) {
+                                        // If the quantity or cost cannot be divided into two minimum trades then it is already too small
+                                        logger.debug(`${getLogName(trade)} trade is already too small to be used for rebalancing.`)
+                                        excluded.push(trade)
                                     }
                                 }
                                 // Deduct excluded costs and remove trades from the wallet

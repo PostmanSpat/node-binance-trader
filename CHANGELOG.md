@@ -1,12 +1,13 @@
-## [1.2.0] (2021-09-21)
+## [1.2.0] (2021-09-23)
 
 ### Bug Fixes
 
-* **trader:** rebalancing will not occur if rounding is more than 50%, or remaining quantity is too small.
+* **trader:** auto-balancing will not occur if rounding is more than 50%, or remaining quantity is too small.
 * **trader:** stopped repeating BNB free threshold message.
 * **trader:** limited decimal places for numbers in the web UI.
 * **trader:** does not generate silly messages if not needed.
-* **trader:** changed rebalancing warning to 5% to reduce log spam.
+* **trader:** changed auto-balancing warning to 5% to reduce log spam.
+* **trader:** stop small trades from blocking auto-balancing.
 
 ### Features
 
