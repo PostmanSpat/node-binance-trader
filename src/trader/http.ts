@@ -331,7 +331,8 @@ function formatHTMLTable(page: Pages, data: any, current?: number, breadcrumb?: 
             for (let col of cols) {
                 result += "<th>" + makeTitleCase(col) + "</th>"
             }
-            result += "<th></th></tr></thead><tbody>"
+            if (hasRowCommands(page)) result += "<th></th>"
+            result += "</tr></thead><tbody>"
 
             // Add row data
             for (let row of data) {
@@ -340,7 +341,7 @@ function formatHTMLTable(page: Pages, data: any, current?: number, breadcrumb?: 
                     result += "<td"
                     if (row[col] instanceof Date) {
                         // Include raw time as the tooltip
-                        result += " title='" + row[col].getTime() + "'>"
+                        result += " class='timestamp' title='" + row[col].getTime() + "'>"
                         result += row[col].toLocaleString()
                     } else if (row[col] instanceof BigNumber) {
                         // Colour negative numbers as red
@@ -362,7 +363,7 @@ function formatHTMLTable(page: Pages, data: any, current?: number, breadcrumb?: 
                     }
                     result += "</td>"
                 }
-                result += "<td>" + makeCommands(page, row) + "</td>"
+                if (hasRowCommands(page)) result += "<td>" + makeCommands(page, row) + "</td>"
                 result += "</tr>"
             }
             result += "</tbody></table>"
@@ -413,7 +414,11 @@ function makeTitleCase(value: string): string {
     return value.replace(/([a-z0-9])([A-Z])/g, '$1 $2').split(' ').map(word => word.toLowerCase() == "id" ? "ID" : word.charAt(0).toUpperCase() + word.substring(1)).join(' ')
 }
 
-function makeCommands(page: Pages, record: any) : string {
+function hasRowCommands(page: Pages): boolean {
+    return page == Pages.TRADES || page == Pages.STRATEGIES
+}
+
+function makeCommands(page: Pages, record: any): string {
     let commands = ""
     let root = page ? URLs[page] : ""
     if (env().WEB_PASSWORD) root += env().WEB_PASSWORD + "&"

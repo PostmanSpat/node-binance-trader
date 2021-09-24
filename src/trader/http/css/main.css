@@ -20,7 +20,6 @@ pre {
 
 table {
     border-width: 1px;
-    overflow: hidden;
 }
 tr {
     border-color: #e5e7eb;
@@ -31,7 +30,7 @@ tbody tr:hover {
 }
 td, th {
     border-style: solid;
-    border-width: 1px 1px 0px 0px;
+    border-width: 0px 1px 1px 0px;
     border-right-color: #e5e7eb33;
 }
 td:last-child, th:last-child {
@@ -39,7 +38,20 @@ td:last-child, th:last-child {
 }
 th {
     border-top-width: 0px;
-    color: rgba(107,114,128,1)
+    background-color: rgba(17,24,39,1);
+    color: rgba(107,114,128,1);
+    position: -webkit-sticky; /* Safari */
+    position: sticky;
+    top: 0;
+}
+th:first-child {
+    border-radius: .5rem 0px 0px 0px;
+}
+th:last-child {
+    border-radius: 0px .5rem 0px 0px;
+}
+tr:last-child td {
+    border-bottom-width: 0px;
 }
 
 button {
@@ -72,7 +84,9 @@ button.disabled {
     color: rgba(156,163,175,1);
 }
 
-#timestamp {
+#timestamp, .timestamp {
     color: rgba(156,163,175,1);
+}
+#timestamp {
     font-size: x-small;
 }
