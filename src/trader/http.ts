@@ -138,7 +138,13 @@ export default function startWebserver(): http.Server {
                 res.send(formatHTMLTable(Pages.TRANS_DB, (await loadRecords("transaction", page)), page))
             } else if (req.query.summary) {
                 const parts = req.query.summary.toString().split(":")
-                res.json(await summariseTransactions(parts[0].toUpperCase(), parts[1] as TradingType))
+                const quote = parts[0].toUpperCase()
+                const tradingType = parts[1] as TradingType
+                const result = {
+                    summary: await summariseTransactions(quote, tradingType),
+                    currentTrades: tradingMetaData.tradesOpen.filter(trade => tradingMetaData.markets[trade.symbol].quote == quote && trade.tradingType == tradingType).length
+                }
+                res.json(result)
             } else {
                 // Use the memory transactions
                 res.send(formatHTMLTable(Pages.TRANS_MEMORY, tradingMetaData.transactions.slice().reverse()))

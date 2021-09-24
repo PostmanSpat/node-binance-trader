@@ -19,6 +19,9 @@ async function showGraph() {
 }
 
 function render(data) {
+    var summary = data.summary ? data.summary : {}
+    var currentTrades = data.currentTrades ? data.currentTrades : 0
+
     // Used to hold each of the series for the three graphs
     var series = {
         pnl: {},
@@ -29,10 +32,10 @@ function render(data) {
     var timesteps = new Set()
 
     // Step through summarised transaction data
-    for (var strategy in data) {
-        for (var position in data[strategy]) {
-            for (var timestep in data[strategy][position]) {
-                var summ = data[strategy][position][timestep]
+    for (var strategy in summary) {
+        for (var position in summary[strategy]) {
+            for (var timestep in summary[strategy][position]) {
+                var summ = summary[strategy][position][timestep]
 
                 for (var param in summ) {
                     var chart = ""
@@ -59,7 +62,7 @@ function render(data) {
 
                     // Convert parameter to series
                     var name = strategy
-                    if (Object.keys(data[strategy]).length > 1) name += " : " + position // Don't add position if there is only one for the strategy
+                    if (Object.keys(summary[strategy]).length > 1) name += " : " + position // Don't add position if there is only one for the strategy
                     if (param != "profitLoss") name += " : " + param // ProfitLoss is the only param that goes on the PnL chart
                     if (!(name in series[chart])) {
                         series[chart][name] = {
@@ -239,11 +242,17 @@ function render(data) {
                     flat.push([parseInt(timestep), s.data[timestep] ? s.data[timestep] : null])
                 }
             }
-            if (chart != "pnl" && s.type == "area" && min[chart] < 0) {
-                // Offset the total trades my the minimum value
+            if (chart == "trades" && s.type == "area" && flat.length) {
+                // The graphs should line up so that the final position in the running count matches the current trades
+                var offset = flat[flat.length-1][1] - currentTrades
+                
+                // If something is wrong with the calculation then we'll just push it up so there are no negative periods
+                if (min[chart] < offset) offset = min[chart]
+
+                // Offset the total trades by the minimum value
                 // This is not technically accurate, but it works of the assumption that at some point in time you will have zero open trades
                 for (var i=0; i<flat.length; ++i) {
-                    flat[i][1] -= min[chart]
+                    flat[i][1] -= offset
                 }
             }
 
