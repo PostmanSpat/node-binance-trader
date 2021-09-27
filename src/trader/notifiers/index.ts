@@ -74,7 +74,7 @@ export function getNotifierMessage(
         if (tradeOpen) {
             if (messageType == MessageType.SUCCESS && tradeOpen.priceBuy && tradeOpen.priceSell) {
                 const percent = calculatePnL(tradeOpen.priceBuy, tradeOpen.priceSell)
-                content.push(percent.toFixed(3) + "%")
+                content.push(format(percent, 3) + "%")
 
                 if (percent.isLessThan(0)) {
                     contentRaw = "LOSS!"
@@ -90,14 +90,14 @@ export function getNotifierMessage(
                 if (tradeOpen.positionType == PositionType.SHORT) dur = 0 - dur
                 dur /= 1000
                 if (dur <= 60) {
-                    content.push(dur.toFixed(1) + " sec")
+                    content.push(format(dur, 1) + " sec")
                 } else {
                     dur /= 60
                     if (dur <= 60) {
-                        content.push(dur.toFixed(1) + " min")
+                        content.push(format(dur, 1) + " min")
                     } else {
                         dur /= 60
-                        content.push(dur.toFixed(1) + " hr")
+                        content.push(format(dur, 1) + " hr")
                     }
                 }
             }
@@ -162,16 +162,16 @@ export function getNotifierMessage(
     }
 }
 
-function format(value: BigNumber | Date | string | undefined): string {
+function format(value: BigNumber | Number | Date | string | undefined, precision: number = env().MAX_WEB_PRECISION): string {
     if (value == undefined) return ""
 
-    if (value instanceof BigNumber) {
-        return value.toFixed(env().MAX_WEB_PRECISION).replace(/\.?0+$/,"")
+    if (value instanceof BigNumber || value instanceof Number) {
+        return value.toFixed(precision).replace(/\.?0+$/,"")
     }
 
     if (value instanceof Date) {
         return value.toISOString()
     }
 
-    return String(value)
+    return value
 }
