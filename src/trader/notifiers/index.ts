@@ -162,10 +162,10 @@ export function getNotifierMessage(
     }
 }
 
-function format(value: BigNumber | Number | Date | string | undefined, precision: number = env().MAX_WEB_PRECISION): string {
+function format(value: BigNumber | number | Date | string | undefined, precision: number = env().MAX_WEB_PRECISION): string {
     if (value == undefined) return ""
 
-    if (value instanceof BigNumber || value instanceof Number) {
+    if (value instanceof BigNumber || typeof value == "number") {
         return value.toFixed(precision).replace(/\.?0+$/,"")
     }
 
