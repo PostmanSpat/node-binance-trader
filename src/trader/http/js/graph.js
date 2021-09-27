@@ -157,7 +157,7 @@ function render(data) {
                 labels: {
                     minWidth: 80,
                     formatter: function (val) {
-                        if (val == null) return ""
+                        if (val == null) return val
                         return Number(val.toFixed(8)).toString() // Need to do a custom format of numbers to limit precision
                     }
                 }
@@ -293,6 +293,16 @@ function render(data) {
         }
         options.title = {
             text: title
+        }
+
+        if (chart == "trades" || chart == "volume") {
+            // Using negative numbers so that they appear below the graph, but they are not really negative
+            options.tooltip.y = {
+                formatter: function (val) {
+                    if (val == null) return val
+                    return Number(Math.abs(val).toFixed(8)).toString()
+                }
+            }
         }
 
         // Create the chart
