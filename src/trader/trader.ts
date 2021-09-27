@@ -508,7 +508,7 @@ function checkStrategyChanges(strategies: Dictionary<Strategy>) {
     // Copy the stopped flag, count of lost trades, and name because these aren't sent from NBT Hub
     for (let strategy of Object.keys(strategies).filter(strategy => strategy in tradingMetaData.strategies)) {
         // Only if the trade (active) flag has not been switched
-        // Toggling the trade flag is how the user can choose to reset the stopped status and loss run
+        // Toggling the trade flag will reset the stopped status and loss run
         if (strategies[strategy].isActive == tradingMetaData.strategies[strategy].isActive) {
             strategies[strategy].isStopped = tradingMetaData.strategies[strategy].isStopped
             strategies[strategy].lossTradeRun = tradingMetaData.strategies[strategy].lossTradeRun
@@ -528,7 +528,7 @@ async function compareStrategyTrades() {
         // Only check the strategies that are still running normally
         for (let strategy of Object.values(tradingMetaData.strategies).filter(strategy => strategy.isActive && !strategy.isStopped)) {
             // Find all trades for this strategy that are open but not stopped or hodling because they would likely be out of sync
-            const userTrades = tradingMetaData.tradesOpen.filter(trade => trade.strategyId == strategy.id && !trade.isStopped && !trade.isHodl)
+            const userTrades = getStratOpenTrades(strategy)
             // Only compare if at least on trade is open
             if (userTrades.length) {
                 // Retrieve the strategy's open trades from the NBT Hub
@@ -885,7 +885,7 @@ function checkTradingData(signal: Signal, source: SourceType): TradingData {
                 const logMessage = `Skipping signal as strategy for ${getLogName(signal)} has been stopped.`
                 logger.warn(logMessage)
                 throw logMessage
-            }        
+            }
 
             // If this is supposed to be a new trade, check there wasn't an existing one
             // This is a workaround for an issue in the NBT Hub, if you miss a close signal while your trader is offline then you may get another open signal for something that is already open
@@ -893,6 +893,15 @@ function checkTradingData(signal: Signal, source: SourceType): TradingData {
             // So until we have a unique ID that is provided on the signal and NBT Hub can track them correctly, we're just going to have to ignore concurrent trades and treat this as a continuation
             if (tradeOpen) {
                 const logMessage = `Skipping signal as an existing open trade was already found for ${getLogName(signal)}.`
+                logger.warn(logMessage)
+                throw logMessage
+            }
+
+            // Check if the trade limit threshold has been hit, a threshold of zero will essentially enforce a trade limit per strategy
+            // Assuming all open trades will lose, this will limit the number of open trades so that losses won't exceed the loss limit
+            // Obviously if more trades opened before the threshold was hit then it cannot control that
+            if (env().STRATEGY_LOSS_LIMIT && strategy.lossTradeRun >= env().STRATEGY_LOSS_LIMIT * env().STRATEGY_LIMIT_THRESHOLD && getStratOpenTrades(strategy).length >= (env().STRATEGY_LOSS_LIMIT - strategy.lossTradeRun)) {
+                const logMessage = `Skipping signal as strategy for ${getLogName(signal)} has reached the threshold for limiting open trades.`
                 logger.warn(logMessage)
                 throw logMessage
             }
@@ -2565,6 +2574,7 @@ export function setStrategyStopped(stratId: string, stop: boolean): string | und
             logger.info(`Stopping ${getLogName(strategy)} strategy.`)
         } else {
             logger.info(`Resuming ${getLogName(strategy)} strategy.`)
+            strategy.lossTradeRun = 0
         }
         strategy.isStopped = stop
         saveState("strategies")
@@ -2573,14 +2583,19 @@ export function setStrategyStopped(stratId: string, stop: boolean): string | und
 }
 
 // Gets a count of the open active trades for a given position type, and also within the same real/virtual trading
-// Doesn't count stopped trades, but will still count HODL trades
+// Doesn't count stopped or count HODL trades
 function getOpenTradeCount(positionType: PositionType, tradingType: TradingType) {
     return tradingMetaData.tradesOpen.filter(
         (tradeOpen) =>
             tradeOpen.positionType === positionType &&
-            !tradeOpen.isStopped &&
+            !tradeOpen.isStopped && !tradeOpen.isHodl &&
             tradeOpen.tradingType == tradingType
     ).length
+}
+
+// Gets all open trades for a strategy that are not stopped or HODL
+function getStratOpenTrades(strategy: Strategy): TradeOpen[] {
+    return tradingMetaData.tradesOpen.filter(trade => trade.strategyId == strategy.id && !trade.isStopped && !trade.isHodl)
 }
 
 // Returns the minimum trade cost with buffer applied for slippage
@@ -2841,6 +2856,7 @@ async function run() {
     if (!Number.isInteger(env().MAX_LONG_TRADES)) issues.push("MAX_LONG_TRADES must be a whole number.")
     if (env().STRATEGY_LOSS_LIMIT < 0) issues.push("STRATEGY_LOSS_LIMIT must be 0 or more.")
     if (!Number.isInteger(env().STRATEGY_LOSS_LIMIT)) issues.push("STRATEGY_LOSS_LIMIT must be a whole number.")
+    if (env().STRATEGY_LIMIT_THRESHOLD < 0 || env().STRATEGY_LIMIT_THRESHOLD > 1) issues.push("STRATEGY_LIMIT_THRESHOLD must be from 0 to 1.")
     if (env().VIRTUAL_WALLET_FUNDS <= 0) issues.push("VIRTUAL_WALLET_FUNDS must be greater than 0.")
     if (env().BNB_FREE_FLOAT < 0) issues.push("BNB_FREE_FLOAT must be 0 or more.")
     if (env().BNB_FREE_THRESHOLD > 0 && env().BNB_FREE_FLOAT > 0 && env().BNB_FREE_FLOAT <= env().BNB_FREE_THRESHOLD) issues.push("BNB_FREE_FLOAT must be more than BNB_FREE_THRESHOLD.")

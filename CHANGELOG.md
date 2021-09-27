@@ -1,4 +1,4 @@
-## [1.2.0] (2021-09-23)
+## [1.2.0] (2021-09-27)
 
 ### Bug Fixes
 
@@ -8,6 +8,7 @@
 * **trader:** does not generate silly messages if not needed.
 * **trader:** changed auto-balancing warning to 5% to reduce log spam.
 * **trader:** stop small trades from blocking auto-balancing.
+* **trader:** clear loss trade run when manually resuming a strategy.
 
 ### Features
 
@@ -27,6 +28,8 @@
 * **trader:** added option to exclude losing trades from auto-balancing.
 * **trader:** added option to shorten notification messages.
 * **trader:** ability to HODL open trades.
+* **trader:** additional BNB threshold warning at 50%.
+* **trader:** added threshold for soft entry of loss limit.
 
 ## [1.1.0] (2021-08-09)
 

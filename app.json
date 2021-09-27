@@ -92,6 +92,10 @@
         "description": "Number of sequential losses before a strategy is stopped",
         "required": false
       },
+      "STRATEGY_LIMIT_THRESHOLD": {
+        "description": "Decimal fraction of the STRATEGY_LOSS_LIMIT to determine when to start limiting open trades",
+        "required": false
+      },
       "IS_TRADE_SHORT_ENABLED": {
         "description": "SHORT trades will always borrow the full funds in margin to execute, disable if you don't want this",
         "required": false

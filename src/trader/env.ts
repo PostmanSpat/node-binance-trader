@@ -50,6 +50,7 @@ export function getDefault(): Readonly<any> {
         MAX_LONG_TRADES: num({ default: 0, desc: "Maximum number of LONG trades that can be open concurrently (i.e. limit borrowing or rebalancing), zero is no limit" }),
         EXCLUDE_COINS: str({ default: "", desc: "Comma delimited list of coins to exclude from trading (e.g. DOGE)" }),
         STRATEGY_LOSS_LIMIT: num({ default: 0, desc: "Number of sequential losses before a strategy is stopped" }),
+        STRATEGY_LIMIT_THRESHOLD: num({ default: 0.5, desc: "Decimal fraction of the STRATEGY_LOSS_LIMIT to determine when to start limiting open trades" }),
         IS_TRADE_SHORT_ENABLED: bool({ default: true, desc: "SHORT trades will always borrow the full funds in margin to execute, disable if you don't want this" }),
         IS_TRADE_MARGIN_ENABLED: bool({ default: true, desc: "Used to disable use of margin wallet trading for both LONG and SHORT trades" }),
         IS_PAY_INTEREST_ENABLED: bool({ default: true, desc: "Automatically repays all BNB interest before repaying margin loans" }),

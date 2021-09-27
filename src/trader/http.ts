@@ -448,9 +448,9 @@ function makeCommands(page: Pages, record: any): string {
                     let strategy: Strategy | PublicStrategy = record as Strategy
                     if ('isActive' in record) {
                         if (!strategy.isStopped) {
-                            commands += makeButton("Shut Down", `Are you sure you want to shut down strategy ${strategy.id}? Existing open trades will only close for profit.`, `${root}stop=${strategy.id}`)
+                            commands += makeButton("Shut Down", `Are you sure you want to shut down strategy ${strategy.id}? Existing open trades will only close for profit. Loss Trade Run will be reset when you resume this strategy.`, `${root}stop=${strategy.id}`)
                         } else {
-                            commands += makeButton("Resume", `Are you sure you want to resume strategy ${strategy.id}? Loss Trade Run will not reset until there is a winning trade, or you remove and add the strategy from the NBT Hub.`, `${root}start=${strategy.id}`)
+                            commands += makeButton("Resume", `Are you sure you want to resume strategy ${strategy.id}? Loss Trade Run will also reset.`, `${root}start=${strategy.id}`)
                         }
                     } else {
                         strategy = record as PublicStrategy
