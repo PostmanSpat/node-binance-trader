@@ -1,4 +1,4 @@
-## [1.2.0] (2021-09-27)
+## [1.2.0] (2021-09-28)
 
 ### Bug Fixes
 
@@ -9,6 +9,7 @@
 * **trader:** changed auto-balancing warning to 5% to reduce log spam.
 * **trader:** stop small trades from blocking auto-balancing.
 * **trader:** clear loss trade run when manually resuming a strategy.
+* **trader:** correct source type for manual close from NBT Hub.
 
 ### Features
 

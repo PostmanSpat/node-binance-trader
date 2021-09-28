@@ -648,7 +648,7 @@ export async function onCloseTradedSignal(signalJson: SignalJson, timestamp: Dat
     logSignal(signal, "close")
     
     // Add the trade signal to the queue because we want each signal to process before the next comes
-    queue.add(() => trade(signal, SourceType.SIGNAL)).catch((reason) => {
+    queue.add(() => trade(signal, SourceType.MANUAL)).catch((reason) => {
         // This was rejected before the trade even started
         if (!checkFailedCloseTrade(signal)) {
             // User tried to close an open trade and it could not be processed
