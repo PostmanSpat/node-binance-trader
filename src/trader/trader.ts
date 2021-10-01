@@ -943,7 +943,7 @@ function checkTradingData(signal: Signal, source: SourceType): TradingData {
             // Check to satisfy the compiler, if no price it will fail later anyway
             if (signal.price) {
                 // Calculate whether this trade will make a profit or loss
-                const percent = PositionType.LONG ? calculatePnL(tradeOpen.priceBuy!, signal.price) : calculatePnL(signal.price, tradeOpen.priceSell!)
+                const percent = signal.positionType == PositionType.LONG ? calculatePnL(tradeOpen.priceBuy!, signal.price) : calculatePnL(signal.price, tradeOpen.priceSell!)
                 logger.debug(`Closing ${percent.isLessThan(0) ? "loss" : "profit"} for ${getLogName(tradeOpen)} trade will be ${percent.toFixed(3)}% with fees.`)
 
                 // Check if strategy has hit the losing trade limit, and this an automatic trade signal
