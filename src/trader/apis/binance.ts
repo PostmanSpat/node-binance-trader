@@ -1,4 +1,4 @@
-import ccxt, { Dictionary, Market } from "ccxt"
+import ccxt, { Dictionary } from "ccxt"
 
 import env from "../env"
 import logger from "../../logger"
@@ -54,7 +54,7 @@ export async function loadMarkets(isReload?: boolean): Promise<ccxt.Dictionary<c
 }
 
 // Loads the latest prices for all symbols
-export async function loadPrices() {
+export async function loadPrices(): Promise<Dictionary<BigNumber>> {
     // Uses the Binance specific call for prices because the data packet is much smaller than the standard .fetchTickers() ccxt call
     return await binanceClient.publicGetTickerPrice().then((value: Price[]) => {
         const prices: Dictionary<BigNumber> = {}
@@ -75,7 +75,7 @@ export async function loadPrices() {
 }
 
 // Get the current market bid and ask prices information for a given symbol
-export async function fetchTicker(market: ccxt.Market) {
+export async function fetchTicker(market: ccxt.Market): Promise<ccxt.Ticker> {
     if (!binanceClient) return Promise.reject(logBinanceUndefined)
 
     return binanceClient.fetchTicker(market.symbol)
@@ -261,6 +261,6 @@ export async function marginRepay(
 }
 
 // Applies precition / step size to the order quantity, also checks lot size
-export function amountToPrecision(symbol: string, quantity: BigNumber) {
+export function amountToPrecision(symbol: string, quantity: BigNumber): BigNumber {
     return new BigNumber(binanceClient.amountToPrecision(symbol, quantity.toNumber()))
 }
