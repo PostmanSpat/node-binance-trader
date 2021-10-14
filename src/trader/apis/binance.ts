@@ -4,7 +4,7 @@ import env from "../env"
 import logger from "../../logger"
 import BigNumber from "bignumber.js"
 import { WalletType } from "../types/trader"
-import { Loan, LoanTransaction, Price } from "../types/binance"
+import { Loan, LoanTransaction, MarginInfo, Price } from "../types/binance"
 
 const logBinanceUndefined = "Binance client is undefined!"
 
@@ -35,13 +35,41 @@ if (process.env.NODE_ENV !== "test") {
 export async function loadMarkets(isReload?: boolean): Promise<ccxt.Dictionary<ccxt.Market>> {
     if (!binanceClient) return Promise.reject(logBinanceUndefined)
     
+    // The margin flag in loadMarkets covers both cross and isolated, but we only care about cross
+    const crossMarginPairs: Dictionary<MarginInfo> = sandbox ? {} : await binanceClient.sapiGetMarginAllPairs()
+    .then((value: MarginInfo[]) => {
+        if (logger.isSillyEnabled()) logger.silly(`Loaded cross margin pairs: ${JSON.stringify(value)}`)
+
+        // Convert to dictionary for easier processing
+        const results: Dictionary<MarginInfo> = {}
+        value.forEach(info => {
+            results[info.symbol] = info
+        })
+        logger.debug(`Loaded ${Object.keys(results).length} margin pairs.`)
+        return results
+    })
+    .catch((reason: any) => {
+        logger.error(`Failed to get cross margin pairs: ${reason}`)
+        return Promise.reject(reason)
+    })
+
     return binanceClient.loadMarkets(isReload)
         .then((value) => {
             if (logger.isSillyEnabled()) logger.silly(`Loaded markets: ${JSON.stringify(value)}`)
-            const markets = JSON.parse(JSON.stringify(value)) // Clone object.
-            Object.keys(markets).forEach((key) => { // Work around the missing slash ("/") in BVA's signal data.
-                const keyNew = markets[key].id
-                markets[keyNew] = markets[key]
+            const markets: Dictionary<ccxt.Market> = JSON.parse(JSON.stringify(value)) // Clone object
+            Object.keys(markets).forEach((key) => {
+                // Work around the missing slash ("/") in BVA's signal data
+                const market = markets[key]
+                const keyNew = market.id
+                markets[keyNew] = market
+
+                // Work around for combined cross and isolated margin flag from Binance
+                if (crossMarginPairs[keyNew]) {
+                    market.margin = crossMarginPairs[keyNew].isMarginTrade
+                } else {
+                    market.margin = false
+                }
+
                 delete markets[key]
             })
             logger.debug(`Loaded ${Object.keys(markets).length} markets.`)
