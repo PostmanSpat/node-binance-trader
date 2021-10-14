@@ -1,3 +1,9 @@
+## [1.2.1] (2021-10-14)
+
+### Bug Fixes
+
+* **trader:** correctly identifies cross margin pairs.
+
 ## [1.2.0] (2021-10-02)
 
 ### Bug Fixes

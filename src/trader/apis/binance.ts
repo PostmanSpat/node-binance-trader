@@ -1,10 +1,10 @@
-import ccxt, { Dictionary, Market } from "ccxt"
+import ccxt, { Dictionary } from "ccxt"
 
 import env from "../env"
 import logger from "../../logger"
 import BigNumber from "bignumber.js"
 import { WalletType } from "../types/trader"
-import { Loan, LoanTransaction, Price } from "../types/binance"
+import { Loan, LoanTransaction, MarginInfo, Price } from "../types/binance"
 
 const logBinanceUndefined = "Binance client is undefined!"
 
@@ -35,13 +35,41 @@ if (process.env.NODE_ENV !== "test") {
 export async function loadMarkets(isReload?: boolean): Promise<ccxt.Dictionary<ccxt.Market>> {
     if (!binanceClient) return Promise.reject(logBinanceUndefined)
     
+    // The margin flag in loadMarkets covers both cross and isolated, but we only care about cross
+    const crossMarginPairs: Dictionary<MarginInfo> = sandbox ? {} : await binanceClient.sapiGetMarginAllPairs()
+    .then((value: MarginInfo[]) => {
+        if (logger.isSillyEnabled()) logger.silly(`Loaded cross margin pairs: ${JSON.stringify(value)}`)
+
+        // Convert to dictionary for easier processing
+        const results: Dictionary<MarginInfo> = {}
+        value.forEach(info => {
+            results[info.symbol] = info
+        })
+        logger.debug(`Loaded ${Object.keys(results).length} margin pairs.`)
+        return results
+    })
+    .catch((reason: any) => {
+        logger.error(`Failed to get cross margin pairs: ${reason}`)
+        return Promise.reject(reason)
+    })
+
     return binanceClient.loadMarkets(isReload)
         .then((value) => {
             if (logger.isSillyEnabled()) logger.silly(`Loaded markets: ${JSON.stringify(value)}`)
-            const markets = JSON.parse(JSON.stringify(value)) // Clone object.
-            Object.keys(markets).forEach((key) => { // Work around the missing slash ("/") in BVA's signal data.
-                const keyNew = markets[key].id
-                markets[keyNew] = markets[key]
+            const markets: Dictionary<ccxt.Market> = JSON.parse(JSON.stringify(value)) // Clone object
+            Object.keys(markets).forEach((key) => {
+                // Work around the missing slash ("/") in BVA's signal data
+                const market = markets[key]
+                const keyNew = market.id
+                markets[keyNew] = market
+
+                // Work around for combined cross and isolated margin flag from Binance
+                if (crossMarginPairs[keyNew]) {
+                    market.margin = crossMarginPairs[keyNew].isMarginTrade
+                } else {
+                    market.margin = false
+                }
+
                 delete markets[key]
             })
             logger.debug(`Loaded ${Object.keys(markets).length} markets.`)
@@ -54,7 +82,7 @@ export async function loadMarkets(isReload?: boolean): Promise<ccxt.Dictionary<c
 }
 
 // Loads the latest prices for all symbols
-export async function loadPrices() {
+export async function loadPrices(): Promise<Dictionary<BigNumber>> {
     // Uses the Binance specific call for prices because the data packet is much smaller than the standard .fetchTickers() ccxt call
     return await binanceClient.publicGetTickerPrice().then((value: Price[]) => {
         const prices: Dictionary<BigNumber> = {}
@@ -75,7 +103,7 @@ export async function loadPrices() {
 }
 
 // Get the current market bid and ask prices information for a given symbol
-export async function fetchTicker(market: ccxt.Market) {
+export async function fetchTicker(market: ccxt.Market): Promise<ccxt.Ticker> {
     if (!binanceClient) return Promise.reject(logBinanceUndefined)
 
     return binanceClient.fetchTicker(market.symbol)
@@ -261,6 +289,6 @@ export async function marginRepay(
 }
 
 // Applies precition / step size to the order quantity, also checks lot size
-export function amountToPrecision(symbol: string, quantity: BigNumber) {
+export function amountToPrecision(symbol: string, quantity: BigNumber): BigNumber {
     return new BigNumber(binanceClient.amountToPrecision(symbol, quantity.toNumber()))
 }
