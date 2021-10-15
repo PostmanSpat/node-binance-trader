@@ -3,6 +3,7 @@
 ### Bug Fixes
 
 * **trader:** correctly identifies cross margin pairs.
+* **trader:** shut down with error exit code.
 
 ## [1.2.0] (2021-10-02)
 

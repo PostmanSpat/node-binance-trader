@@ -2989,9 +2989,9 @@ export function shutDown(reason: any) {
     }).finally(() => {
         // Just in case something still needs to be written to the database, try to flush it first
         if (dirty.size) {
-            flushDirty().catch(() => {}).finally(process.exit())
+            flushDirty().catch(() => {}).finally(process.exit(1))
         } else {
-            process.exit()
+            process.exit(1)
         }
     })
 }
