@@ -1,9 +1,10 @@
-## [1.2.1] (2021-10-14)
+## [1.2.1] (2021-10-19)
 
 ### Bug Fixes
 
 * **trader:** correctly identifies cross margin pairs.
 * **trader:** shut down with error exit code.
+* **trader:** prevent search engine indexing.
 
 ## [1.2.0] (2021-10-02)
 

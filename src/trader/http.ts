@@ -227,6 +227,7 @@ function authenticate(req: any, res: any): boolean {
 
 function formatHTML(page: Pages, data: any, current?: number): string {
     let html = `<html><head><title>NBT: ${page.replace("<br />", " ")}</title>`
+    html += `<meta name="robots" content="noindex">`
     html += `<link rel="icon" href="/img/favicon.svg" type="image/svg+xml">`
     html += `<link rel="stylesheet" href="css/main.css">`
     html += `</head><body>`
