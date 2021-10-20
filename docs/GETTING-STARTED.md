@@ -10,7 +10,7 @@ The total time to complete this guide should be less than 10 minutes if you alre
 1. **[Setting up your own personal trading bot](#setting-up-your-own-personal-trading-bot)**
 1. **[Getting it running](#getting-it-running)**
 1. **[Start trading](#start-trading)**
-1. **[Keep it trading 24/7](#keep-it-trading-24/7)**
+1. **[Keep it trading 24/7](#keep-it-trading-247)**
 1. **[Additional configuration options](#additional-configuration-options)**
 1. **[Common questions](#common-questions)**
 
