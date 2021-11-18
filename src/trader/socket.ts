@@ -35,7 +35,7 @@ export function connect(): void {
 
     socket.on("connect_error", (error: any) => {
         logger.error(`Unable to connect to the NBT Hub: ${error}`)
-        shutDown(error)
+        if (!authenticated) shutDown(error)
     })
 
     socket.on("error", (error: any) => {
