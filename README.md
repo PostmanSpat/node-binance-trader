@@ -122,6 +122,11 @@ The new features that I have added to the trader include:
   * If you want to force the trader to do a comparison you can also just toggle or change something on the favourite strategies page on the NBT Hub. Comparisons will not be done for strategies or trades that are stopped.
 * **Track Order Price / Cost**
   * When a real trade is successfully executed on Binance the actual buy or sell price and cost will be saved from the response. These prices and cost will be reported in the notifications and transactions, as well as used for calculating the closing balances for the PnL. This can be useful if you want to get a better idea of slippage.
+* **Validate Filled Quantity**
+  * If you have run out of BNB to cover trading fees then Binance will deduct the fees from the trade quantity, which means the quantity availale to close the trade will not match the expected opening quantity. The trader will now detect this on buy orders and will adjust the trade quantity or borrow amount so that the trade can still be closed.
+  * When this occurs it will likely mean a discrepancy in the quantity in Binance so you will need to clean it up manually. For LONG trades you will need to use the "Convert Small Balance to BNB" option to convert the remainder. For SHORT trades you will need to manually buy the minimum amount and pay off the loan, then convert the remainder to BNB.
+  * An error will be reported in the log and a notification message will be sent (if enabled) that will show the original and adjusted amounts.
+  * It is strongly recommended that you keep your BNB topped up to avoid this situation.
 * **Additional Notifications**
   * If a trade fails to execute it will now send a notification with the error message.
   * If there are any issues loading previous trades after the trader restarts it will now send a notification message.

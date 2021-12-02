@@ -1,3 +1,10 @@
+## [1.2.2] (2021-12-02)
+
+### Features
+
+* **trader:** validate if loaded SHORT trades can exist on margin.
+* **trader:** check and adjust quantity to match filled buy order.
+
 ## [1.2.1] (2021-10-20)
 
 ### Bug Fixes
