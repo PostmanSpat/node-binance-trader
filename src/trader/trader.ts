@@ -243,6 +243,13 @@ async function loadPreviousOpenTrades(strategies: Dictionary<Strategy>): Promise
                 badTrades.push(trade)
                 continue
             }
+
+            if (trade.positionType == PositionType.SHORT && !tradingMetaData.markets[trade.symbol].margin) {
+                // This can happen if the position type on the BVA Hub gets flipped
+                logger.error(`${getLogName(trade)} trade symbol is no longer supported on Binance margin trading, it will be discarded.`)
+                badTrades.push(trade)
+                continue
+            }
         }
 
         // Remove bad trades so that they don't get considered for balance allocation
@@ -1224,6 +1231,7 @@ async function executeTradeAction(
             status: "closed",
             price: price,
             cost: tradeOpen.quantity.multipliedBy(price).toNumber(),
+            filled: tradeOpen.quantity.toNumber(),
 
             // Not used
             id: "",
@@ -1235,7 +1243,6 @@ async function executeTradeAction(
             type: "",
             side: 'buy',
             amount: 0,
-            filled: 0,
             remaining: 0,
             trades: [],
             fee: {
@@ -1253,6 +1260,38 @@ async function executeTradeAction(
         // Status is returned for real buy / sell orders
         if ("status" in result) {
             if (result.status == "closed") {
+                // If you do not have enough BNB to cover fees you may not receive the full amount
+                // Only need to check on buy trades as the wallet buffer will cover sell shortfalls
+                if (action == ActionType.BUY && !tradeOpen.quantity.isEqualTo(result.filled)) {
+                    const market = tradingMetaData.markets[tradeOpen.symbol]
+                    var logMessage = `${getLogName(tradeOpen)} trade only filled ${result.filled.toFixed()} ${market.base} instead of ${tradeOpen.quantity.toFixed()} ${market.base}.`
+                    if (tradeOpen.positionType == PositionType.LONG) {
+                        // Deducted fees will likely result in an illegal quantity, so recalculate
+                        const legalQty = getLegalQty(new BigNumber(result.filled), market, new BigNumber(result.price))
+                        if (legalQty.isGreaterThan(result.filled)) {
+                            logMessage += ` You do not have enough for the minimum trade quantity of ${legalQty.toFixed()} ${market.base}, this trade cannot be closed.`
+                        } else if (legalQty.isLessThan(result.filled)) {
+                            logMessage += ` The legal trade quantity will be rounded down to ${legalQty.toFixed()} ${market.base}, you will need to manually convert the remainder.`
+                        }
+                        // Update to the revised quantity so that is able to sell later
+                        // Note, this will mess up the PnL a bit as it will seem like it is double dipping on fees
+                        tradeOpen.quantity = legalQty
+                    } else { // SHORT
+                        if (tradeOpen.borrow && tradeOpen.borrow.isGreaterThan(result.filled)) {
+                            logMessage += ` You do not have enough to repay the full loan of ${tradeOpen.borrow.toFixed()} ${market.base}, you will need to manually repay the remainder.`
+                            // Update the borrow amount so that it is able to repay
+                            tradeOpen.borrow = new BigNumber(result.filled)
+                        }
+                    }
+                    logMessage += ` Check that you have enough BNB to cover trading fees.`
+                    logger.error(logMessage)
+
+                    // Send notifications that trade was incomplete
+                    notifyAll(getNotifierMessage(MessageType.ERROR, undefined, signal, undefined, logMessage)).catch((reason) => {
+                        logger.silly("executeTradeAction->notifyAll: " + reason)
+                    })
+                }
+
                 // Check if the price and cost is different than we expected (it usually is)
                 if (result.price) {
                     switch (action) {
