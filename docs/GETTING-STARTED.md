@@ -154,6 +154,7 @@ To add new Config Vars in Heroku:
 | EXCLUDE_COINS | coin, coin, coin | Comma delimited list of coins to exclude from trading (e.g. DOGE) |
 | STRATEGY_LOSS_LIMIT | integer >= 0 | Number of sequential losses before a strategy is stopped |
 | STRATEGY_LIMIT_THRESHOLD | decimal number >= 0 and <= 1 | Decimal fraction of the STRATEGY_LOSS_LIMIT to determine when to start limiting open trades |
+| IS_AUTO_CLOSE_ENABLED | true / false | Used to automatically close HODL trades or any trades for stopped strategies |
 | IS_TRADE_SHORT_ENABLED | true / false | SHORT trades will always borrow the full funds in margin to execute, disable if you don't want this |
 | IS_TRADE_MARGIN_ENABLED | true / false | Used to disable use of margin wallet trading for both LONG and SHORT trades |
 | IS_PAY_INTEREST_ENABLED | true / false | Automatically repays all BNB interest before repaying margin loans |
