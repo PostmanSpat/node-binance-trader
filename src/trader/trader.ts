@@ -1551,7 +1551,7 @@ export async function executeTradingTask(
     const info = source == SourceType.SIGNAL ? `within ${diff} milliseconds of the signal` : `for ${source}`
     logger.info(`${getLogName(tradeOpen)} trade successfully ${action == ActionType.BUY ? "bought" : "sold" } ${tradeOpen.quantity} ${market.base} for ${tradeOpen.cost} ${market.quote} on ${tradeOpen.wallet} ${info}.`)
 
-    if ((signal && signal.entryType == EntryType.EXIT) || source == SourceType.MANUAL) {
+    if ((signal && signal.entryType == EntryType.EXIT) || source == SourceType.MANUAL || source == SourceType.AUTO_CLOSE) {
         // Remove the completed trade if exit or manual close (rebalance won't be in the trade list)
         removeTradeOpen(tradeOpen)
     }
@@ -1680,6 +1680,8 @@ function scheduleTrade(
                         removeTradeOpen(tradeOpen)
                     }
                     break
+                case SourceType.AUTO_CLOSE:
+                    break
             }
 
             // Send notifications that trading failed
@@ -1694,12 +1696,6 @@ function scheduleTrade(
 
 // Processes the trade signal and schedules the trade actions
 export async function trade(signal: Signal, source: SourceType) {
-    // Check if the cache needs to be refreshed, we'll do this asynchronously because we can use the previous set of data now
-    refreshMarkets().catch((reason) => {
-        logger.silly("trade->refreshMarkets: " + reason)
-        // Don't really care if this doesn't work
-    })
-
     // Check that this is a signal we want to process
     const tradingData = checkTradingData(signal, source)
 
@@ -1974,7 +1970,14 @@ export function calculatePnL(priceBuy: BigNumber, priceSell: BigNumber): BigNumb
     const buyFee = 1 + (env().TAKER_FEE_PERCENT / 100)
     const sellFee = 1 - (env().TAKER_FEE_PERCENT / 100)
 
-    return priceSell.multipliedBy(sellFee).minus(priceBuy.multipliedBy(buyFee)).dividedBy(priceBuy.multipliedBy(buyFee)).multipliedBy(100)
+    let percent = priceSell.multipliedBy(sellFee).minus(priceBuy.multipliedBy(buyFee)).dividedBy(priceBuy.multipliedBy(buyFee)).multipliedBy(100)
+
+    // Just in case one of the prices is zero or invalid
+    if (!percent.isFinite() || percent.isNaN()) {
+        percent = new BigNumber(-999)
+    }
+
+    return percent
 }
 
 // Calculates the trade quantity, cost, and amount to borrow based on available funds and the configured funding model
@@ -2878,6 +2881,67 @@ export async function topUpBNBFloat(wallet: WalletType, quote: string): Promise<
     }
 }
 
+// If auto close is enabled it will check the current price for any HODL trades or any open trades for stopped strategies and immediately close the trade if it is in profit
+async function closeHODLTrades() {
+    if (env().IS_AUTO_CLOSE_ENABLED) {
+        // Find HODL trades and stopped strategies, but make sure trade and strategy are still active
+        const trades = tradingMetaData.tradesOpen.filter(trade =>
+            trade.isExecuted &&
+            !trade.isStopped &&
+            tradingMetaData.strategies[trade.strategyId] &&
+            tradingMetaData.strategies[trade.strategyId].isActive &&
+            (trade.isHodl ||
+            tradingMetaData.strategies[trade.strategyId].isStopped)
+        )
+
+        // If there are any trades to be checked
+        if (trades.length) {
+            // Get the latest prices
+            await refreshPrices().catch((reason) => {
+                logger.silly("checkHODLTrades->refreshPrices: " + reason)
+                return Promise.reject(reason)
+            })
+
+            // Check the trade is valid just in case the trade was closed or started closing while we were waiting for prices
+            for (const tradeOpen of trades.filter(trade => tradingMetaData.tradesOpen.includes(trade) && !tradingMetaData.tradesClosing.has(trade))) {
+                // The price difference won't be exactly right because we're not looking at the market ask price, but hopefully it is close enough
+                const percent = tradeOpen.positionType == PositionType.SHORT ?
+                                    calculatePnL(tradingMetaData.prices[tradeOpen.symbol], tradeOpen.priceSell!)
+                                    : calculatePnL(tradeOpen.priceBuy!, tradingMetaData.prices[tradeOpen.symbol])
+                // Do not sell for a loss, but can break even
+                if (percent.isGreaterThanOrEqualTo(0)) {
+                    // Set the closing price
+                    if (tradeOpen.positionType == PositionType.SHORT) {
+                        tradeOpen.priceBuy = tradingMetaData.prices[tradeOpen.symbol]
+                    } else {
+                        tradeOpen.priceSell = tradingMetaData.prices[tradeOpen.symbol]
+                    }
+
+                    logger.info(`${getLogName(tradeOpen)} trade's PnL is now ${percent.toFixed(3)}% so it will be closed.`)
+                    scheduleTrade(tradeOpen, EntryType.EXIT, SourceType.AUTO_CLOSE)
+                } else {
+                    logger.debug(`${getLogName(tradeOpen)} trade's PnL is only ${percent.toFixed(3)}%.`)
+                }
+            }
+        }
+    }
+}
+
+// Function to do background tasks periodically
+function background() {
+    logger.debug("Running background processes...")
+
+    // Check if the cache needs to be refreshed
+    refreshMarkets().catch((reason) => {
+        logger.silly("background->refreshMarkets: " + reason)
+    })
+
+    // Check to see if any HODL trades can be closed
+    closeHODLTrades().catch((reason) => {
+        logger.silly("background->checkHODLTrades: " + reason)
+    })
+}
+
 // Main function to start the trader
 async function run() {
     logger.info(`NBT Trader v${env().VERSION} is starting...`)
@@ -2960,6 +3024,9 @@ async function startUp() {
 
     // Once it connects to the NBT Hub it should trigger the onUserPayload() method to continue setting up the trader
     socket.connect()
+    
+    // Start a repeating timer for running background processes
+    setInterval(background, env().BACKGROUND_INTERVAL)
 
     // Other things will happen after this asynchronously before the trader is operational
     logger.debug("NBT Trader start up sequence is complete.")

@@ -31,7 +31,8 @@ export enum ActionType {
 export enum SourceType {
     SIGNAL = "Trade Signal",
     MANUAL = "User Action",
-    REBALANCE = "Auto Balancing"
+    REBALANCE = "Auto Balancing",
+    AUTO_CLOSE = "Auto Close"
 }
 
 export interface TradingData {

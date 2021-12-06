@@ -4,6 +4,7 @@
 
 * **trader:** validate if loaded SHORT trades can exist on margin.
 * **trader:** check and adjust quantity to match filled buy order.
+* **trader:** added option to auto close HODL trades.
 
 ## [1.2.1] (2021-10-20)
 

@@ -110,6 +110,9 @@ The new features that I have added to the trader include:
 * **HODL Open Trades**
   * Using the feature in the **Web Diagnostics** above you can select individual trades to enable HODL (Hold On for Dear Life). Unlike a stopped trade, a HODL trade can still close automatically from a signal but only if the price will result in a profit. HODL can be set on individual trades without having to stop the strategy.
   * By default a HODL trade will not be used for auto-balancing, but if you have enabled the **Prevent Losses for Auto-Balancing** option then a HODL trade may be used once the price is in profit.
+* ***CONFIG:* Automatically Close HODL Trades**
+  * If enabled, the trader will periodically check the current price of any trades that are set to HODL, or any trades that belong to a strategy that has been stopped (shut down), and will automatically close any trades that are expected to make a profit. The trader does not do a trailing stop loss, so it will close the trade the first time it detects a profit. This will likely mean that the profit will be minimal, and may even make a small loss if slippage occurs. However, the benefit is that it will close the trades at the earliest opportunity rather than waiting for the original strategy to send another close signal.
+  * By default this option is disabled. When enabled it will check the latest prices as part of the background process, which is currently on a five minute interval.
 * **Individual Tracking of Real / Virtual Trades**
   * In the original trader if you started a strategy in virtual trading and switched to real trading, or vice versa, it would attempt to close trades based on the current status of the strategy, rather than how the trade was originally opened. This means it could try to close a trade on Binance that was originally opened virtually, or never close the open trade on Binance because you've now switched the strategy to virtual. Now, if the trade opened on Binance it will close on Binance even if the strategy has been switched to virtual. If you don't want this to happen, make sure you close or stop the open trades before switching modes.
   * This is a useful way to soft close a strategy. Rather than manually closing the live trades yourself, you can switch the strategy to virtual and wait for the automatic close signals for any remaining open trades.
@@ -131,10 +134,10 @@ The new features that I have added to the trader include:
   * If a trade fails to execute it will now send a notification with the error message.
   * If there are any issues loading previous trades after the trader restarts it will now send a notification message.
   * Trade notifications now include the quantity, cost, borrowed amount, wallet, trading type (live or virtual), and actual buy and sell prices from the transaction.
-* **CONFIG: Notification Level Filter**
+* ***CONFIG:* Notification Level Filter**
   * If you are happy to monitor the status of your trades in the Web Diagnostics but want to receive notifications when something goes wrong, you can now change the Notifier Level in the settings to limit the types of messages that are sent by the notification system.
   * The default is 'info' which allows all, but can be changed to 'success', 'warn', or 'error'. 
-* **CONFIG: Short Notification Messages**
+* ***CONFIG:* Short Notification Messages**
   * Enabling this setting will reduce the notification messages to only show basic details about the trade or signal, such as the cost, percentage change in price, and duration. This can be useful when using Telegram, as the key information will be visible in the message popup.
 * ***CONFIG:* Additional Logging**
   * By default the trader will only log 'info', 'warn', and 'error' messages. But there is an internal setting to change the logging level to 'debug' if you want more insight into what decisions the trader is making. You can even drop the level to 'silly' to see all incoming JSON messages and SQL statements.

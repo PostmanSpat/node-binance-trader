@@ -51,6 +51,7 @@ export function getDefault(): Readonly<any> {
         EXCLUDE_COINS: str({ default: "", desc: "Comma delimited list of coins to exclude from trading (e.g. DOGE)" }),
         STRATEGY_LOSS_LIMIT: num({ default: 0, desc: "Number of sequential losses before a strategy is stopped" }),
         STRATEGY_LIMIT_THRESHOLD: num({ default: 0.5, desc: "Decimal fraction of the STRATEGY_LOSS_LIMIT to determine when to start limiting open trades" }),
+        IS_AUTO_CLOSE_ENABLED: bool({ default: false, desc: "Used to automatically close HODL trades or any trades for stopped strategies" }),
         IS_TRADE_SHORT_ENABLED: bool({ default: true, desc: "SHORT trades will always borrow the full funds in margin to execute, disable if you don't want this" }),
         IS_TRADE_MARGIN_ENABLED: bool({ default: true, desc: "Used to disable use of margin wallet trading for both LONG and SHORT trades" }),
         IS_PAY_INTEREST_ENABLED: bool({ default: true, desc: "Automatically repays all BNB interest before repaying margin loans" }),
@@ -72,6 +73,7 @@ export function getDefault(): Readonly<any> {
         MAX_WEB_GRAPH_DAYS: num({ default: 7, desc: "Maximum number days to display on the transaction summary graphs in the web UI" }),
         REFERENCE_SYMBOL: str({ default: "BNBBTC", desc: "Uses this market data to calculate wallet funds for other coins" }),
         BALANCE_SYNC_DELAY: num({ default: 1500, desc: "Number of milliseconds to wait after making a trade before fetching current balances" }),
+        BACKGROUND_INTERVAL: num({ default: 300000, desc: "Number of milliseconds between running the background process" }),
     })
 }
 
