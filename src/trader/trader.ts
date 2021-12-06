@@ -1231,8 +1231,13 @@ async function executeTradeAction(
             status: "closed",
             price: price,
             cost: tradeOpen.quantity.multipliedBy(price).toNumber(),
-            filled: tradeOpen.quantity.toNumber(),
-
+            fee: {
+                type: 'taker',
+                currency: "BNB",
+                rate: 0,
+                cost: 0
+            },
+            
             // Not used
             id: "",
             clientOrderId: "",
@@ -1243,14 +1248,9 @@ async function executeTradeAction(
             type: "",
             side: 'buy',
             amount: 0,
+            filled: 0,
             remaining: 0,
             trades: [],
-            fee: {
-                type: 'taker',
-                currency: "",
-                rate: 0,
-                cost: 0
-            },
             info: null
         }
     }
@@ -1262,31 +1262,38 @@ async function executeTradeAction(
             if (result.status == "closed") {
                 // If you do not have enough BNB to cover fees you may not receive the full amount
                 // Only need to check on buy trades as the wallet buffer will cover sell shortfalls
-                if (action == ActionType.BUY && !tradeOpen.quantity.isEqualTo(result.filled)) {
+                if (action == ActionType.BUY && result.fee.currency != "BNB") {
                     const market = tradingMetaData.markets[tradeOpen.symbol]
-                    var logMessage = `${getLogName(tradeOpen)} trade only filled ${result.filled.toFixed()} ${market.base} instead of ${tradeOpen.quantity.toFixed()} ${market.base}.`
-                    if (tradeOpen.positionType == PositionType.LONG) {
-                        // Deducted fees will likely result in an illegal quantity, so recalculate
-                        const legalQty = getLegalQty(new BigNumber(result.filled), market, new BigNumber(result.price))
-                        if (legalQty.isGreaterThan(result.filled)) {
-                            logMessage += ` You do not have enough for the minimum trade quantity of ${legalQty.toFixed()} ${market.base}, this trade cannot be closed.`
-                        } else if (legalQty.isLessThan(result.filled)) {
-                            logMessage += ` The legal trade quantity will be rounded down to ${legalQty.toFixed()} ${market.base}, you will need to manually convert the remainder.`
-                        }
-                        // Update to the revised quantity so that is able to sell later
-                        // Note, this will mess up the PnL a bit as it will seem like it is double dipping on fees
-                        tradeOpen.quantity = legalQty
-                    } else { // SHORT
-                        if (tradeOpen.borrow && tradeOpen.borrow.isGreaterThan(result.filled)) {
-                            logMessage += ` You do not have enough to repay the full loan of ${tradeOpen.borrow.toFixed()} ${market.base}, you will need to manually repay the remainder.`
-                            // Update the borrow amount so that it is able to repay
-                            tradeOpen.borrow = new BigNumber(result.filled)
+                    var logMessage = `${getLogName(tradeOpen)} trade used ${result.fee.cost} ${result.fee.currency} to pay fees instead of BNB.`
+
+                    // Check if the fee was paid from the base quantity
+                    if (result.fee.currency == market.base) {
+                        // Calculate the new quantity by deducting the fee
+                        const qty = tradeOpen.quantity.minus(result.fee.cost)
+
+                        if (tradeOpen.positionType == PositionType.LONG) {
+                            // Deducted fees will likely result in an illegal quantity, so recalculate
+                            const legalQty = getLegalQty(qty, market, new BigNumber(result.price))
+                            if (legalQty.isGreaterThan(qty)) {
+                                logMessage += ` You do not have enough for the minimum trade quantity of ${legalQty.toFixed()} ${market.base}, this trade cannot be closed.`
+                            } else if (legalQty.isLessThan(qty)) {
+                                logMessage += ` The legal trade quantity will be rounded down to ${legalQty.toFixed()} ${market.base}, you will need to manually convert the remainder.`
+                            }
+                            // Update to the revised quantity so that is able to sell later
+                            // Note, this will mess up the PnL a bit as it will seem like it is double dipping on fees
+                            tradeOpen.quantity = legalQty
+                        } else { // SHORT
+                            if (tradeOpen.borrow && tradeOpen.borrow.isGreaterThan(qty)) {
+                                logMessage += ` You do not have enough to repay the full loan of ${tradeOpen.borrow.toFixed()} ${market.base}, you will need to manually repay the remainder.`
+                                // Update the borrow amount so that it is able to repay
+                                tradeOpen.borrow = new BigNumber(qty)
+                            }
                         }
                     }
                     logMessage += ` Check that you have enough BNB to cover trading fees.`
                     logger.error(logMessage)
 
-                    // Send notifications that trade was incomplete
+                    // Send notifications that fees were not paid in BNB
                     notifyAll(getNotifierMessage(MessageType.ERROR, undefined, signal, undefined, logMessage)).catch((reason) => {
                         logger.silly("executeTradeAction->notifyAll: " + reason)
                     })
