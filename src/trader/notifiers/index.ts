@@ -103,7 +103,7 @@ export function getNotifierMessage(
             }
         }
 
-        if (source == SourceType.REBALANCE) {
+        if (source && source != SourceType.SIGNAL) {
             content.push(source)
         }
 
