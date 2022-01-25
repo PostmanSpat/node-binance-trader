@@ -1281,7 +1281,7 @@ async function executeTradeAction(
                         // Have to assume the worst and calculate the whole fee in the base asset
                         feeQty = tradeOpen.quantity.multipliedBy(env().TAKER_FEE_PERCENT / 100)
 
-                        logMessage = `${getLogName(tradeOpen)} trade result did not contain fee information, it probably used some ${market.base} for fees. Trade size will be reduced by ${feeCost.toFixed()} ${market.base} just in case.`
+                        logMessage = `${getLogName(tradeOpen)} trade result did not contain fee information, it probably used some ${market.base} for fees. Trade size will be reduced by ${feeQty.toFixed()} ${market.base} just in case.`
                     }
                     
                     if (feeQty.isGreaterThan(0)) {
