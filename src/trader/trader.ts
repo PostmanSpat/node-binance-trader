@@ -1262,14 +1262,31 @@ async function executeTradeAction(
             if (result.status == "closed") {
                 // If you do not have enough BNB to cover fees you may not receive the full amount
                 // Only need to check on buy trades as the wallet buffer will cover sell shortfalls
-                if (action == ActionType.BUY && result.fee.currency != "BNB") {
+                if (action == ActionType.BUY) {
+                    var logMessage = ""
                     const market = tradingMetaData.markets[tradeOpen.symbol]
-                    var logMessage = `${getLogName(tradeOpen)} trade used ${result.fee.cost} ${result.fee.currency} to pay fees instead of BNB.`
+                    var feeQty = new BigNumber(0)
 
-                    // Check if the fee was paid from the base quantity
-                    if (result.fee.currency == market.base) {
+                    if (result.fee) {
+                        if (result.fee.currency != "BNB") {
+                            logMessage = `${getLogName(tradeOpen)} trade used ${result.fee.cost} ${result.fee.currency} to pay fees instead of BNB.`
+
+                            // Check if the fee was paid from the base asset
+                            if (result.fee.currency == market.base) {
+                                feeQty = new BigNumber(result.fee.cost)
+                            }
+                        }
+                    } else {
+                        // This usually occurs when the fees were paid with some BNB and some of the base asset
+                        // Have to assume the worst and calculate the whole fee in the base asset
+                        feeQty = tradeOpen.quantity.multipliedBy(env().TAKER_FEE_PERCENT / 100)
+
+                        logMessage = `${getLogName(tradeOpen)} trade result did not contain fee information, it probably used some ${market.base} for fees. Trade size will be reduced by ${feeCost.toFixed()} ${market.base} just in case.`
+                    }
+                    
+                    if (feeQty.isGreaterThan(0)) {
                         // Calculate the new quantity by deducting the fee
-                        const qty = tradeOpen.quantity.minus(result.fee.cost)
+                        const qty = tradeOpen.quantity.minus(feeQty)
 
                         if (tradeOpen.positionType == PositionType.LONG) {
                             // Deducted fees will likely result in an illegal quantity, so recalculate
@@ -1290,13 +1307,16 @@ async function executeTradeAction(
                             }
                         }
                     }
-                    logMessage += ` Check that you have enough BNB to cover trading fees.`
-                    logger.error(logMessage)
 
-                    // Send notifications that fees were not paid in BNB
-                    notifyAll(getNotifierMessage(MessageType.ERROR, undefined, signal, undefined, logMessage)).catch((reason) => {
-                        logger.silly("executeTradeAction->notifyAll: " + reason)
-                    })
+                    if (logMessage) {
+                        logMessage += ` Check that you have enough BNB to cover trading fees.`
+                        logger.error(logMessage)
+
+                        // Send notifications that fees were not paid in BNB
+                        notifyAll(getNotifierMessage(MessageType.ERROR, undefined, signal, undefined, logMessage)).catch((reason) => {
+                            logger.silly("executeTradeAction->notifyAll: " + reason)
+                        })
+                    }
                 }
 
                 // Check if the price and cost is different than we expected (it usually is)
