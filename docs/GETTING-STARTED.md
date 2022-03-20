@@ -160,7 +160,8 @@ To add new Config Vars in Heroku:
 | IS_PAY_INTEREST_ENABLED | true / false | Automatically repays all BNB interest before repaying margin loans |
 | BNB_FREE_THRESHOLD | decimal number | Creates a warning if your available BNB balance is below the threshold (too low for fees and interest) |
 | BNB_FREE_FLOAT | decimal number >= 0 | The BNB top up option will buy enough BNB to return your free balance to this level |
-| TAKER_FEE_PERCENT | decimal number >= 0 | The spot trading Taker Fee as quoted on Binance |
+| TAKER_FEE_PERCENT | decimal number >= 0 | The discounted spot trading Taker Fee as quoted on Binance when using BNB |
+| TAKER_FEE_PERCENT_OTHER | decimal number >= 0 | The standard spot trading Taker Fee as quoted on Binance when not using BNB |
 | MIN_COST_BUFFER | decimal number >= 0 | Decimal fraction to increase the minimum trade cost to avoid MIN_NOTIONAL errors |
 | VIRTUAL_WALLET_FUNDS | decimal number > 0 | The (roughly) equivalent BTC value used as the default starting balance for all virtual wallets |
 | WEB_PASSWORD | string | Password to restrict access to the internal diagnostics webserver |

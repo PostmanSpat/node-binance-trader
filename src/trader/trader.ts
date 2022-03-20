@@ -1279,7 +1279,7 @@ async function executeTradeAction(
                     } else {
                         // This usually occurs when the fees were paid with some BNB and some of the base asset
                         // Have to assume the worst and calculate the whole fee in the base asset
-                        feeQty = tradeOpen.quantity.multipliedBy(env().TAKER_FEE_PERCENT / 100)
+                        feeQty = tradeOpen.quantity.multipliedBy(env().TAKER_FEE_PERCENT_OTHER / 100)
 
                         logMessage = `${getLogName(tradeOpen)} trade result did not contain fee information, it probably used some ${market.base} for fees. Trade size will be reduced by ${feeQty.toFixed()} ${market.base} just in case.`
                     }
@@ -2991,6 +2991,7 @@ async function run() {
     if (env().BNB_FREE_FLOAT < 0) issues.push("BNB_FREE_FLOAT must be 0 or more.")
     if (env().BNB_FREE_THRESHOLD > 0 && env().BNB_FREE_FLOAT > 0 && env().BNB_FREE_FLOAT <= env().BNB_FREE_THRESHOLD) issues.push("BNB_FREE_FLOAT must be more than BNB_FREE_THRESHOLD.")
     if (env().TAKER_FEE_PERCENT < 0) issues.push("TAKER_FEE_PERCENT must be 0 or more.")
+    if (env().TAKER_FEE_PERCENT_OTHER < 0) issues.push("TAKER_FEE_PERCENT_OTHER must be 0 or more.")
     if (env().MIN_COST_BUFFER < 0) issues.push("MIN_COST_BUFFER must be 0 or more.")
     if (env().IS_FUNDS_NO_LOSS && ![LongFundsType.SELL_ALL, LongFundsType.SELL_LARGEST, LongFundsType.SELL_LARGEST_PNL].includes(env().TRADE_LONG_FUNDS)) issues.push("IS_FUNDS_NO_LOSS should be false if not using one of the 'sell' options for TRADE_LONG_FUNDS.")
     if (!env().IS_TRADE_MARGIN_ENABLED && env().PRIMARY_WALLET == WalletType.MARGIN) issues.push(`PRIMARY_WALLET cannot be ${WalletType.MARGIN} if IS_TRADE_MARGIN_ENABLED is false.`)

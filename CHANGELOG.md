@@ -1,3 +1,9 @@
+## [1.2.3] (2022-03-20)
+
+### Bug Fixes
+
+* **trader:** added non-discounted fees for adjusting quantity.
+
 ## [1.2.2] (2022-02-18)
 
 ### Features
