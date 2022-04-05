@@ -35,7 +35,7 @@ import {
     TradingType,
 } from "./types/bva"
 import { MessageType } from "./types/notifier"
-import { WalletType, TradingData, TradingMetaData, TradingSequence, LongFundsType, WalletData, ActionType, SourceType, Transaction, BalanceHistory } from "./types/trader"
+import { WalletType, TradingData, TradingMetaData, TradingSequence, LongFundsType, WalletData, ActionType, SourceType, Transaction, BalanceHistory, BNBStateType } from "./types/trader"
 
 // Standard error messages
 const logDefaultEntryType = "It shouldn't be possible to have an entry type other than enter or exit."
@@ -2776,35 +2776,56 @@ const BNBState: Dictionary<string> = {}
 async function checkBNBThreshold(wallet: WalletType) {
     if (env().BNB_FREE_THRESHOLD >= 0) {
         // Initialise dictionary, assuming it is ok to start with
-        if (!(wallet in BNBState)) BNBState[wallet] = "ok"
+        if (!(wallet in BNBState)) BNBState[wallet] = BNBStateType.OK
 
         // Fetch the BNB balance for this wallet and calculate how much is free
         const balance = (await loadWalletBalances(TradingType.real, undefined, "BNB", wallet))[wallet]
         logger.debug(`${balance.free} BNB free in ${wallet}.`)
         if (balance.free.isLessThanOrEqualTo(env().BNB_FREE_THRESHOLD)) {
-            // Check if the low balance hasn't already been reported, but report again if it gets below half the threshold
-            if (BNBState[wallet] == "ok" || (BNBState[wallet] == "high" && balance.free.isLessThanOrEqualTo(env().BNB_FREE_THRESHOLD / 2)) || (BNBState[wallet] == "low" && balance.free.isLessThanOrEqualTo(0))) {
-                // Log the low balance warning or error for empty balance
-                let notifyLevel = MessageType.WARN
-                let logMessage = `Your ${wallet} wallet only has ${balance.free} BNB free. You may need to top it up.`
-                if (balance.free.isLessThanOrEqualTo(0)) {
-                    BNBState[wallet] = "empty"
-                    notifyLevel = MessageType.ERROR
-                    logMessage = `Your ${wallet} wallet has no free BNB. You will need to top it up now.`
-                    logger.error(logMessage)
-                } else {
-                    BNBState[wallet] = balance.free.isLessThanOrEqualTo(env().BNB_FREE_THRESHOLD / 2) ? "low" : "high"
-                    logger.warn(logMessage)
-                }
+            // Check if the low balance hasn't already been reported or topped up, but report again if it gets below half the threshold
+            if (BNBState[wallet] == BNBStateType.OK || ((BNBState[wallet] == BNBStateType.HIGH || BNBState[wallet] == BNBStateType.AUTO) && balance.free.isLessThanOrEqualTo(env().BNB_FREE_THRESHOLD / 2)) || (BNBState[wallet] != BNBStateType.EMPTY && balance.free.isLessThanOrEqualTo(0))) {
+                let logMessage = `Your ${wallet} wallet only has ${balance.free} BNB free.`
 
-                // Send as a notification
-                notifyAll({messageType: notifyLevel, subject: notifyLevel, content: logMessage}).catch((reason) => {
-                    logger.silly("checkBNBThreshold->notifyAll: " + reason)
-                })
+                if (BNBState[wallet] == BNBStateType.OK && env().BNB_AUTO_TOP_UP) {
+                    logger.info(logMessage)
+
+                    // Attempt an automatic top up first, but if this fails a notification will still be sent when it gets to half the threshold
+                    BNBState[wallet] = BNBStateType.AUTO
+                    topUpBNBFloat(wallet, env().BNB_AUTO_TOP_UP).then((result) => {
+                        // Send success as a notification
+                        notifyAll({messageType: MessageType.SUCCESS, subject: MessageType.SUCCESS, content: result}).catch((reason) => {
+                            logger.silly("checkBNBThreshold->notifyAll: " + reason)
+                        })
+                    }).catch((reason) => {
+                        // Send failure as a notification
+                        notifyAll({messageType: MessageType.ERROR, subject: MessageType.ERROR, content: logMessage + ' ' + reason}).catch((reason) => {
+                            logger.silly("checkBNBThreshold->notifyAll: " + reason)
+                        })
+                    })
+                } else {
+                    // Log the low balance warning or error for empty balance
+                    let notifyLevel = MessageType.WARN
+                    logMessage += ` You may need to top it up.`
+
+                    if (balance.free.isLessThanOrEqualTo(0)) {
+                        BNBState[wallet] = BNBStateType.EMPTY
+                        notifyLevel = MessageType.ERROR
+                        logMessage = `Your ${wallet} wallet has no free BNB. You will need to top it up now.`
+                        logger.error(logMessage)
+                    } else {
+                        BNBState[wallet] = balance.free.isLessThanOrEqualTo(env().BNB_FREE_THRESHOLD / 2) ? BNBStateType.LOW : BNBStateType.HIGH
+                        logger.warn(logMessage)
+                    }
+
+                    // Send as a notification
+                    notifyAll({messageType: notifyLevel, subject: notifyLevel, content: logMessage}).catch((reason) => {
+                        logger.silly("checkBNBThreshold->notifyAll: " + reason)
+                    })
+                }
             }
         } else {
             // Reset once the balance has exceeded the threshold again
-            BNBState[wallet] = "ok"
+            BNBState[wallet] = BNBStateType.OK
         }
     }
 }

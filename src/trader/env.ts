@@ -57,6 +57,7 @@ export function getDefault(): Readonly<any> {
         IS_PAY_INTEREST_ENABLED: bool({ default: true, desc: "Automatically repays all BNB interest before repaying margin loans" }),
         BNB_FREE_THRESHOLD: num({ default: 0.04, desc: "Creates a warning if your available BNB balance is below the threshold (too low for fees and interest)"}),
         BNB_FREE_FLOAT: num({ default: 0.1, desc: "The BNB top up option will buy enough BNB to return your free balance to this level"}),
+        BNB_AUTO_TOP_UP: str({ default: "", desc: "Quote currency (e.g. BTC) used to automatically top up BNB to the float once the available balance is below the threshold" }),
         TAKER_FEE_PERCENT: num({ default: 0.075, desc: "The discounted spot trading Taker Fee as quoted on Binance when using BNB"}),
         TAKER_FEE_PERCENT_OTHER: num({ default: 0.1, desc: "The standard spot trading Taker Fee as quoted on Binance when not using BNB"}),
         MIN_COST_BUFFER: num({ default: 0.2, desc: "Decimal fraction to increase the minimum trade cost to avoid MIN_NOTIONAL errors"}),

@@ -67,6 +67,10 @@ The new features that I have added to the trader include:
   * It is better to use this option rather than converting manually through Binance so that the trader can adjust the PnL for the change in balance. It does this by offsetting the fees in the balance history.
   * BNB top ups will not appear in the transactions list.
   * The default is 0.1 BNB, you can set it to 0 if you do not want to allow the top up feature.
+* ***CONFIG:* BNB Free Auto Top Up**
+  * If you do not want to manually top up the BNB you can set a chosen coin (e.g. BTC) to always use for topping up. If set, this will automatically attempt to purchase BNB using the specified coin and restore the balance to the **Top Up Float** as soon as the balance drops below the **Threshold**.
+  * If it succeeds or fails the result will be logged and a notification will be sent.
+  * The default is blank, which is disabled.
 * ***CONFIG:* Estimated Taker Fee**
   * In a typical setup, fees are charged in BNB, therefore they do not affect the balance of the coin used for funding the strategy. So in order to make the calculated PnL more accurate, the estimated fees are calculated based on the spot wallet Taker Fee percentage. It does not currently calculate the interest charged on margin lending.
   * Unlike other settings, this is represented as a percentage and not a decimal fraction. This means you can just copy and paste the fee directly from Binance.

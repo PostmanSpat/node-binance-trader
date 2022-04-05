@@ -35,6 +35,15 @@ export enum SourceType {
     AUTO_CLOSE = "Auto Close"
 }
 
+// States used for BNB top up
+export enum BNBStateType {
+    OK = "ok",
+    AUTO = "auto",
+    HIGH = "high",
+    LOW = "low",
+    EMPTY = "empty"
+}
+
 export interface TradingData {
     market: Market
     signal: Signal

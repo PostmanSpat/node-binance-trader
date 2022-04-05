@@ -1,4 +1,8 @@
-## [1.2.3] (2022-03-20)
+## [1.2.3] (2022-04-05)
+
+### Features
+
+* **trader:** added automatic top up for BNB.
 
 ### Bug Fixes
 
