@@ -7,6 +7,7 @@
 ### Bug Fixes
 
 * **trader:** added non-discounted fees for adjusting quantity.
+* **trader:** added validation for NODE_ENV.
 
 ## [1.2.2] (2022-02-18)
 

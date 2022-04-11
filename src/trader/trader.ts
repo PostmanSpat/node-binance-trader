@@ -2996,6 +2996,7 @@ async function run() {
 
     // Validate environment variable configuration
     let issues: string[] = []
+    if (!process.env.NODE_ENV) issues.push("NODE_ENV is a required value, this needs to be configured if not automatically set by the environment.")
     if (env().MAX_LOG_LENGTH <= 1) issues.push("MAX_LOG_LENGTH must be greater than 0.")
     if (!Number.isInteger(env().MAX_LOG_LENGTH)) issues.push("MAX_LOG_LENGTH must be a whole number.")
     if (env().MAX_DATABASE_ROWS < 100 && env().MAX_DATABASE_ROWS != 0) issues.push("MAX_DATABASE_ROWS must be 0 or 100 or more.")
